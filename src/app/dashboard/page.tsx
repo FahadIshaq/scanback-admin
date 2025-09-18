@@ -1,20 +1,17 @@
 "use client"
 
 import { useAuth } from "@/hooks/use-auth"
+import { AdminDashboard } from "@/components/admin-dashboard"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 
-export default function HomePage() {
+export default function DashboardPage() {
   const { admin, loading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!loading) {
-      if (admin) {
-        router.push('/dashboard')
-      } else {
-        router.push('/login')
-      }
+    if (!loading && !admin) {
+      router.push('/login')
     }
   }, [admin, loading, router])
 
@@ -26,5 +23,9 @@ export default function HomePage() {
     )
   }
 
-  return null // Will redirect
+  if (!admin) {
+    return null // Will redirect to login
+  }
+
+  return <AdminDashboard />
 }
