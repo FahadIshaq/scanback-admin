@@ -6,44 +6,11 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { QrCode, Search, Filter, Download, Eye, MoreHorizontal } from "lucide-react"
-import adminApiClient from "@/lib/api"
+import adminApiClient, { QRCode } from "@/lib/api"
 import { formatDate } from "@/lib/utils"
 
-interface QRCodeItem {
-  _id: string
-  code: string
-  type: "item" | "pet"
-  details: {
-    name: string
-    description?: string
-    category?: string
-    color?: string
-    brand?: string
-    model?: string
-    serialNumber?: string
-    species?: string
-    breed?: string
-    age?: number
-    microchipId?: string
-    value?: number
-    purchaseDate?: string
-    warrantyExpiry?: string
-  }
-  contact: {
-    phone: string
-    email: string
-    message?: string
-  }
-  status: "active" | "inactive" | "suspended" | "found"
-  isActivated: boolean
-  scanCount: number
-  lastScanned?: string
-  createdAt: string
-  qrImageUrl?: string
-}
-
 export function QRCodeList() {
-  const [qrCodes, setQrCodes] = useState<QRCodeItem[]>([])
+  const [qrCodes, setQrCodes] = useState<QRCode[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")

@@ -1,18 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import adminApiClient from "@/lib/api"
-
-interface Admin {
-  id: string
-  email: string
-  name: string
-  role: string
-  permissions: string[]
-}
+import adminApiClient, { AdminUser } from "@/lib/api"
 
 export function useAuth() {
-  const [admin, setAdmin] = useState<Admin | null>(null)
+  const [admin, setAdmin] = useState<AdminUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
