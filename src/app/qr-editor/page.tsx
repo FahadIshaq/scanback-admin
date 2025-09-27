@@ -2,8 +2,9 @@
 
 import { QRStickerEditor } from '@/components/qr-sticker-editor'
 import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function QREditorPage() {
+function QREditorContent() {
   const searchParams = useSearchParams()
   const qrCodeUrl = searchParams.get('qrCodeUrl')
   const qrCode = searchParams.get('qrCode')
@@ -26,5 +27,20 @@ export default function QREditorPage() {
         qrCode={qrCode}
       />
     </div>
+  )
+}
+
+export default function QREditorPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading QR Editor...</p>
+        </div>
+      </div>
+    }>
+      <QREditorContent />
+    </Suspense>
   )
 }
