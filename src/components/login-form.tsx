@@ -41,12 +41,12 @@ export function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-white p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="p-3 bg-primary/10 rounded-full">
-              <Shield className="h-8 w-8 text-primary" />
+            <div className="p-3 bg-black rounded-full">
+              <Shield className="h-8 w-8 text-white" />
             </div>
           </div>
           <CardTitle className="text-2xl font-bold">Admin Login</CardTitle>

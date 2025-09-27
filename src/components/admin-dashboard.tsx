@@ -74,12 +74,12 @@ export function AdminDashboard() {
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <QrCode className="h-6 w-6 text-primary" />
+              <div className="p-2 bg-black rounded-lg">
+                <QrCode className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">ScanBack Admin</h1>
-                <p className="text-sm text-gray-500">QR Code Management System</p>
+                <h1 className="text-xl font-bold text-black">ScanBack Admin</h1>
+                <p className="text-sm text-gray-600">QR Code Management System</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">

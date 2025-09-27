@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, Copy, Check, FileImage, FileText, File } from "lucide-react"
+import { Download, Copy, Check, FileImage, FileText, File, Palette } from "lucide-react"
 import adminApiClient from "@/lib/api"
+import { QRStickerEditor } from "./qr-sticker-editor"
 
 export function QRCodeGenerator() {
   const [formData, setFormData] = useState({
@@ -22,6 +23,7 @@ export function QRCodeGenerator() {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [exportFormat, setExportFormat] = useState<"png" | "svg" | "pdf" | "txt">("png")
+  const [showStickerEditor, setShowStickerEditor] = useState(false)
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -392,6 +394,15 @@ Generated on: ${new Date().toLocaleString()}
                     Generate New
                   </Button>
                 </div>
+
+                {/* Sticker Editor Button */}
+                <Button
+                  onClick={() => setShowStickerEditor(true)}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  <Palette className="h-4 w-4 mr-2" />
+                  Design Custom Sticker
+                </Button>
                 
                 {/* Quick Export Buttons */}
                 <div className="space-y-2">
@@ -440,6 +451,40 @@ Generated on: ${new Date().toLocaleString()}
           </Card>
         )}
       </div>
+
+      {/* Navigate to full-screen editor */}
+      {showStickerEditor && generatedQR && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 text-center">
+            <h3 className="text-xl font-bold mb-4">Open Full-Screen Editor</h3>
+            <p className="text-gray-600 mb-6">
+              The QR sticker editor will open in a new full-screen page for the best editing experience.
+            </p>
+            <div className="flex space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowStickerEditor(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const params = new URLSearchParams({
+                    qrCodeUrl: generatedQR.qrImageUrl,
+                    qrCode: generatedQR.code
+                  })
+                  window.open(`/qr-editor?${params.toString()}`, '_blank')
+                  setShowStickerEditor(false)
+                }}
+                className="flex-1"
+              >
+                Open Editor
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
