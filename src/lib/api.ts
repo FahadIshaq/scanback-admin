@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://scanback.vercel.app:3001/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://scanback.vercel.app/api';
 
 // TypeScript interfaces
 interface ApiResponse<T> {
