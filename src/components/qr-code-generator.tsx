@@ -6,13 +6,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, Copy, Check, FileImage, FileText, File, Palette } from "lucide-react"
+import { Download, Copy, Check, FileImage, FileText, File, Palette, Stethoscope } from "lucide-react"
 import adminApiClient from "@/lib/api"
 import { QRStickerEditor } from "./qr-sticker-editor"
 
 export function QRCodeGenerator() {
   const [formData, setFormData] = useState({
-    type: "item" as "item" | "pet"
+    type: "item" as "item" | "pet" | "emergency" | "any"
   })
 
   const [generatedQR, setGeneratedQR] = useState<{
@@ -237,7 +237,7 @@ Generated on: ${new Date().toLocaleString()}
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">Generate QR Code</h2>
-        <p className="text-gray-600">Create blank QR codes - users will add their item/pet details when scanning</p>
+        <p className="text-gray-600">Create blank QR codes - users will add their item/pet/emergency details when scanning</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -254,16 +254,18 @@ Generated on: ${new Date().toLocaleString()}
               {/* Type Selection */}
               <div className="space-y-2">
                 <Label htmlFor="type">QR Code Type *</Label>
-                <Select value={formData.type} onValueChange={(value: "item" | "pet") => handleInputChange("type", value)}>
+                <Select value={formData.type} onValueChange={(value: "item" | "pet" | "emergency" | "any") => handleInputChange("type", value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select QR code type" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="item">📱 Item</SelectItem>
                     <SelectItem value="pet">🐕 Pet</SelectItem>
+                    <SelectItem value="emergency">🚨 Emergency</SelectItem>
+                    <SelectItem value="any">🎯 Any Type</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500">Only these two types are available</p>
+                <p className="text-xs text-gray-500">Four types are available: Item, Pet, Emergency, and Any Type</p>
               </div>
 
               {/* No additional fields needed - users will fill everything when scanning */}
@@ -273,13 +275,16 @@ Generated on: ${new Date().toLocaleString()}
                 <div className="bg-blue-50 p-4 rounded-lg">
                   <h3 className="text-lg font-medium mb-2 text-blue-900">📝 How It Works</h3>
                   <p className="text-sm text-blue-700 mb-2">
-                    <strong>Admin generates blank QR codes for Items and Pets.</strong>
+                    <strong>Admin generates blank QR codes for Items, Pets, Emergency contacts, and Any Type.</strong>
+                  </p>
+                  <p className="text-sm text-blue-700 mb-2">
+                    <strong>Any Type QR codes:</strong> When scanned, users can choose whether it's an Item, Pet, or Emergency tag.
                   </p>
                   <p className="text-sm text-blue-700">
                     When users scan the QR code, they will:
                   </p>
                   <ul className="text-sm text-blue-700 mt-2 ml-4 list-disc">
-                    <li>Fill in their {formData.type} details (name, description, etc.)</li>
+                    <li>{formData.type === 'any' ? 'Choose the tag type (Item, Pet, or Emergency)' : `Fill in their ${formData.type} details (name, description, etc.)`}</li>
                     <li>Add their contact information</li>
                     <li>Activate the QR code</li>
                     <li>Receive confirmation email</li>

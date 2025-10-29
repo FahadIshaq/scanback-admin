@@ -61,14 +61,18 @@ export function QRCodeList() {
   }
 
   const getTypeIcon = (type: string) => {
-    return type === "pet" ? "🐕" : "📱"
+    switch (type) {
+      case "pet": return "🐕"
+      case "emergency": return "🚨"
+      default: return "📱"
+    }
   }
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">QR Codes Management</h2>
-        <p className="text-gray-600">View and manage all generated Item and Pet QR codes</p>
+        <p className="text-gray-600">View and manage all generated Item, Pet, and Emergency QR codes</p>
       </div>
 
       {/* Filters */}
@@ -94,6 +98,7 @@ export function QRCodeList() {
                 <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="item">Items</SelectItem>
                 <SelectItem value="pet">Pets</SelectItem>
+                <SelectItem value="emergency">Emergency</SelectItem>
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -123,7 +128,7 @@ export function QRCodeList() {
             <div>
               <CardTitle>QR Codes ({filteredQRCodes.length})</CardTitle>
               <CardDescription>
-                All generated Item and Pet QR codes - users fill contact details when scanning
+                All generated Item, Pet, and Emergency QR codes - users fill contact details when scanning
               </CardDescription>
             </div>
             <Button variant="outline">

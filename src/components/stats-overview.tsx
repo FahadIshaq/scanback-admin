@@ -52,7 +52,7 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">Dashboard Overview</h2>
-        <p className="text-gray-600">Manage Item and Pet QR codes - users fill details when scanning</p>
+        <p className="text-gray-600">Manage Item, Pet, and Emergency QR codes - users fill details when scanning</p>
       </div>
 
       {/* Stats Grid */}
@@ -96,6 +96,7 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
               {[
                 { code: "ABC123DEF456", type: "Pet", action: "Scanned", time: "2 minutes ago" },
                 { code: "XYZ789GHI012", type: "Item", action: "Activated", time: "5 minutes ago" },
+                { code: "EMG345RED678", type: "Emergency", action: "Activated", time: "8 minutes ago" },
                 { code: "MNO345PQR678", type: "Pet", action: "Found", time: "10 minutes ago" },
                 { code: "STU901VWX234", type: "Item", action: "Scanned", time: "15 minutes ago" },
               ].map((activity, index) => (
@@ -130,7 +131,7 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
                   <QrCode className="h-5 w-5 text-blue-600" />
                   <div>
                     <p className="text-sm font-medium text-gray-900">Generate QR Codes</p>
-                    <p className="text-xs text-gray-500">Create Item and Pet QR codes</p>
+                    <p className="text-xs text-gray-500">Create Item, Pet, and Emergency QR codes</p>
                   </div>
                 </div>
               </button>

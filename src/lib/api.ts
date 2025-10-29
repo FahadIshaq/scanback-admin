@@ -10,7 +10,7 @@ interface ApiResponse<T> {
 interface QRCode {
   _id: string;
   code: string;
-  type: 'item' | 'pet';
+  type: 'item' | 'pet' | 'emergency';
   isActivated: boolean;
   details: {
     name: string;
@@ -27,6 +27,21 @@ interface QRCode {
     value?: number;
     purchaseDate?: string;
     warrantyExpiry?: string;
+    // Emergency Details fields
+    medicalAidProvider?: string;
+    medicalAidNumber?: string;
+    bloodType?: string;
+    allergies?: string;
+    medications?: string;
+    organDonor?: boolean;
+    iceNote?: string;
+    // Emergency Contacts fields
+    emergencyContact1Name?: string;
+    emergencyContact1Phone?: string;
+    emergencyContact1CountryCode?: string;
+    emergencyContact2Name?: string;
+    emergencyContact2Phone?: string;
+    emergencyContact2CountryCode?: string;
   };
   contact: {
     name: string;
@@ -54,6 +69,7 @@ interface QRCodeStats {
   activatedQRCodes: number;
   itemQRCodes: number;
   petQRCodes: number;
+  emergencyQRCodes: number;
   recentQRCodes: QRCode[];
 }
 
@@ -74,7 +90,6 @@ class AdminApiClient {
   constructor(baseURL: string) {
     this.baseURL = baseURL;
     this.token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
-    console.log('API Client initialized with token:', this.token ? 'exists' : 'none');
   }
 
   setToken(token: string) {
@@ -141,7 +156,7 @@ class AdminApiClient {
 
   // QR Code management
   async generateQRCode(data: {
-    type: 'item' | 'pet';
+    type: 'item' | 'pet' | 'emergency' | 'any';
     details: any;
     contact: any;
   }) {
@@ -228,7 +243,7 @@ class AdminApiClient {
   }
 
   // Bulk operations
-  async bulkGenerateQRCodes(data: { count: number; type: 'item' | 'pet'; template: any }): Promise<ApiResponse<any>> {
+  async bulkGenerateQRCodes(data: { count: number; type: 'item' | 'pet' | 'emergency'; template: any }): Promise<ApiResponse<any>> {
     return this.request<ApiResponse<any>>('/admin/bulk-generate', {
       method: 'POST',
       body: JSON.stringify(data),
