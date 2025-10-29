@@ -1,14 +1,14 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, Copy, Check, FileImage, FileText, File, Palette, Stethoscope } from "lucide-react"
+import { Download, Copy, Check, FileImage, FileText, File, Palette } from "lucide-react"
 import adminApiClient from "@/lib/api"
-import { QRStickerEditor } from "./qr-sticker-editor"
 
 export function QRCodeGenerator() {
   const [formData, setFormData] = useState({
@@ -278,7 +278,7 @@ Generated on: ${new Date().toLocaleString()}
                     <strong>Admin generates blank QR codes for Items, Pets, Emergency contacts, and Any Type.</strong>
                   </p>
                   <p className="text-sm text-blue-700 mb-2">
-                    <strong>Any Type QR codes:</strong> When scanned, users can choose whether it's an Item, Pet, or Emergency tag.
+                    <strong>Any Type QR codes:</strong> When scanned, users can choose whether it&apos;s an Item, Pet, or Emergency tag.
                   </p>
                   <p className="text-sm text-blue-700">
                     When users scan the QR code, they will:
@@ -310,10 +310,12 @@ Generated on: ${new Date().toLocaleString()}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-center">
-                <img
+                <Image
                   src={generatedQR.qrImageUrl}
                   alt="Generated QR Code"
-                  className="w-48 h-48 border rounded-lg"
+                  width={192}
+                  height={192}
+                  className="border rounded-lg"
                 />
               </div>
               

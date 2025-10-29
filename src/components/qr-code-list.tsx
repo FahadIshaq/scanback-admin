@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,11 +18,7 @@ export function QRCodeList() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
 
-  useEffect(() => {
-    loadQRCodes()
-  }, [currentPage, typeFilter, statusFilter])
-
-  const loadQRCodes = async () => {
+  const loadQRCodes = useCallback(async () => {
     try {
       setLoading(true)
       const response = await adminApiClient.getAllQRCodes({
@@ -41,7 +37,11 @@ export function QRCodeList() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentPage, typeFilter, statusFilter])
+
+  useEffect(() => {
+    loadQRCodes()
+  }, [loadQRCodes])
 
   const filteredQRCodes = qrCodes.filter(qr => {
     const matchesSearch = qr.code.toLowerCase().includes(searchTerm.toLowerCase()) ||

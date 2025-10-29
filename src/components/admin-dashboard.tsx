@@ -13,11 +13,8 @@ import {
   QrCode, 
   Users, 
   BarChart3, 
-  Settings, 
   LogOut,
   Plus,
-  List,
-  UserCheck,
   Activity
 } from "lucide-react"
 
