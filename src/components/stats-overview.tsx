@@ -35,8 +35,8 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
       value: stats.totalScans.toLocaleString(),
       description: "QR code scans",
       icon: MousePointer,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50"
+      color: "text-blue-600",
+      bgColor: "bg-blue-50"
     },
     {
       title: "Active QR Codes",
@@ -146,9 +146,9 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
                 </div>
               </button>
               
-              <button className="w-full text-left p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors">
+              <button className="w-full text-left p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
                 <div className="flex items-center space-x-3">
-                  <MousePointer className="h-5 w-5 text-purple-600" />
+                  <MousePointer className="h-5 w-5 text-blue-600" />
                   <div>
                     <p className="text-sm font-medium text-gray-900">View Analytics</p>
                     <p className="text-xs text-gray-500">Detailed usage statistics</p>

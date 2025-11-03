@@ -1,4 +1,5 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://scanback.vercel.app/api';
+// API base URL - backend root URL (paths already include /api/)
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://scanback-backend.vercel.app';
 
 // TypeScript interfaces
 interface ApiResponse<T> {
@@ -138,7 +139,7 @@ class AdminApiClient {
 
   // Admin authentication
   async adminLogin(credentials: { email: string; password: string }): Promise<ApiResponse<{ user: AdminUser; token: string }>> {
-    const response = await this.request<ApiResponse<{ user: AdminUser; token: string }>>('/auth/login', {
+    const response = await this.request<ApiResponse<{ user: AdminUser; token: string }>>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
@@ -151,7 +152,7 @@ class AdminApiClient {
   }
 
   async getCurrentAdmin(): Promise<ApiResponse<{ user: AdminUser }>> {
-    return this.request<ApiResponse<{ user: AdminUser }>>('/auth/me');
+    return this.request<ApiResponse<{ user: AdminUser }>>('/api/auth/me');
   }
 
   // QR Code management
@@ -160,7 +161,7 @@ class AdminApiClient {
     details: any;
     contact: any;
   }) {
-    return this.request('/admin/generate-qr', {
+    return this.request('/api/admin/generate-qr', {
       method: 'POST',
       body: JSON.stringify({ type: data.type }),
     });
@@ -174,11 +175,11 @@ class AdminApiClient {
     if (params?.status) queryParams.append('status', params.status);
 
     const queryString = queryParams.toString();
-    return this.request<ApiResponse<QRCodeListResponse>>(`/admin/qr-codes${queryString ? `?${queryString}` : ''}`);
+    return this.request<ApiResponse<QRCodeListResponse>>(`/api/admin/qr-codes${queryString ? `?${queryString}` : ''}`);
   }
 
   async getQRCodeStats(): Promise<ApiResponse<QRCodeStats>> {
-    return this.request<ApiResponse<QRCodeStats>>('/admin/stats');
+    return this.request<ApiResponse<QRCodeStats>>('/api/admin/stats');
   }
 
   async updateQRCodeStatus(code: string, status: string): Promise<ApiResponse<any>> {
@@ -206,7 +207,7 @@ class AdminApiClient {
   }
 
   async getUserStats(): Promise<ApiResponse<any>> {
-    return this.request<ApiResponse<any>>('/admin/user-stats');
+    return this.request<ApiResponse<any>>('/api/admin/user-stats');
   }
 
   async updateUserStatus(userId: string, status: string): Promise<ApiResponse<any>> {
@@ -244,7 +245,7 @@ class AdminApiClient {
 
   // Bulk operations
   async bulkGenerateQRCodes(data: { count: number; type: 'item' | 'pet' | 'emergency'; template: any }): Promise<ApiResponse<any>> {
-    return this.request<ApiResponse<any>>('/admin/bulk-generate', {
+    return this.request<ApiResponse<any>>('/api/admin/bulk-generate', {
       method: 'POST',
       body: JSON.stringify(data),
     });

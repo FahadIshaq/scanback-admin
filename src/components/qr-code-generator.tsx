@@ -262,7 +262,7 @@ Generated on: ${new Date().toLocaleString()}
                     <SelectItem value="item">📱 Item</SelectItem>
                     <SelectItem value="pet">🐕 Pet</SelectItem>
                     <SelectItem value="emergency">🚨 Emergency</SelectItem>
-                    <SelectItem value="any">🎯 Any Type</SelectItem>
+                    <SelectItem value="any">🎯 General Type</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-gray-500">Four types are available: Item, Pet, Emergency, and Any Type</p>
@@ -405,7 +405,7 @@ Generated on: ${new Date().toLocaleString()}
                 {/* Sticker Editor Button */}
                 <Button
                   onClick={() => setShowStickerEditor(true)}
-                  className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <Palette className="h-4 w-4 mr-2" />
                   Design Custom Sticker
