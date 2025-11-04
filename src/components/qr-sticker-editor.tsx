@@ -1262,11 +1262,11 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
       const exportCanvas = new fabric.Canvas(tempCanvas, {
         width: design.width,
         height: design.height,
-        backgroundColor: null, // Explicitly set to null for transparency
       })
       
-      // Explicitly set canvas background to transparent
-      exportCanvas.backgroundColor = null
+      // Explicitly set canvas background to transparent (no background)
+      // Use type assertion to allow undefined for transparency
+      ;(exportCanvas as any).backgroundColor = undefined
       exportCanvas.renderOnAddRemove = false
       
       // Get all objects from the main canvas (only the design elements)
@@ -1335,8 +1335,8 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
       } else if (design.exportFormat === 'svg') {
         // SVG supports transparency
         const svgData = exportCanvas.toSVG({
-          width: design.width,
-          height: design.height,
+          width: String(design.width),
+          height: String(design.height),
         })
         
         const blob = new Blob([svgData], { type: 'image/svg+xml' })
@@ -1361,7 +1361,8 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
           selectable: false,
           evented: false,
         })
-        exportCanvas.insertAt(whiteBg, 0, false)
+        exportCanvas.add(whiteBg)
+        exportCanvas.sendObjectToBack(whiteBg)
         exportCanvas.renderAll()
         
         const dataUrl = exportCanvas.toDataURL({ 
