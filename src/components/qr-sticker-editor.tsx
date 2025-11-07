@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, Copy, Check, FileImage, FileText, File, Palette, Square, Circle, Hexagon, Star, Heart, Settings, Type, Image as ImageIcon, RotateCcw, Save, Move, RotateCw, ZoomIn, ZoomOut, Trash2, Layers, Lock, Unlock, Upload, Wand2, Eraser, Grid3x3, Ruler, Maximize2, Minimize2 } from "lucide-react"
+import { Download, Copy, Check, FileImage, FileText, File, Palette, Square, Circle, Hexagon, Star, Heart, Settings, Type, Image as ImageIcon, RotateCcw, Save, Move, RotateCw, ZoomIn, ZoomOut, Trash2, Layers, Lock, Unlock, Upload, Wand2, Eraser, Grid3x3, Ruler, Maximize2, Minimize2, FolderOpen, Filter, X, Search, BookOpen } from "lucide-react"
 import jsPDF from 'jspdf'
 import * as fabric from 'fabric'
 import { removeBackground, processImage } from '@/services/image-processing'
@@ -60,6 +60,35 @@ interface StickerDesign {
   exportQuality: number
   exportDpi: number
 }
+
+interface StickerTemplate {
+  id: string
+  name: string
+  description?: string
+  design: StickerDesign
+  shape: 'square' | 'circle' | 'rectangle-landscape' | 'rectangle-portrait'
+  size: '15x15mm' | '20x20mm' | '25x25mm' | '45x45mm'
+  category: 'item' | 'pet' | 'emergency'
+  isLocked: boolean
+  createdAt: string
+  updatedAt: string
+  preview?: string // Base64 preview image
+}
+
+// Size presets in mm to pixels (at 300 DPI)
+const SIZE_PRESETS = {
+  '15x15mm': { width: 177, height: 177 }, // 15mm * 300 DPI / 25.4mm per inch
+  '20x20mm': { width: 236, height: 236 },
+  '25x25mm': { width: 295, height: 295 },
+  '45x45mm': { width: 531, height: 531 },
+}
+
+// Convert mm to pixels at 300 DPI
+const mmToPixels = (mm: number, dpi: number = 300): number => {
+  return Math.round((mm / 25.4) * dpi)
+}
+
+const STORAGE_KEY = 'qr-sticker-templates'
 
 export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCode: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -126,6 +155,32 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
   const [showGrid, setShowGrid] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(100)
   const [showRulers, setShowRulers] = useState(false)
+  
+  // Template management
+  const [templates, setTemplates] = useState<StickerTemplate[]>([])
+  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false)
+  const [currentTemplate, setCurrentTemplate] = useState<StickerTemplate | null>(null)
+  const [isTemplateLocked, setIsTemplateLocked] = useState(false)
+  const [templateFilters, setTemplateFilters] = useState<{
+    shape?: 'square' | 'circle' | 'rectangle-landscape' | 'rectangle-portrait'
+    size?: '15x15mm' | '20x20mm' | '25x25mm' | '45x45mm'
+    category?: 'item' | 'pet' | 'emergency'
+  }>({})
+  const [templateSearch, setTemplateSearch] = useState('')
+  const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false)
+  const [saveTemplateData, setSaveTemplateData] = useState<{
+    name: string
+    description: string
+    shape: 'square' | 'circle' | 'rectangle-landscape' | 'rectangle-portrait'
+    size: '15x15mm' | '20x20mm' | '25x25mm' | '45x45mm'
+    category: 'item' | 'pet' | 'emergency'
+  }>({
+    name: '',
+    description: '',
+    shape: 'square',
+    size: '25x25mm',
+    category: 'item'
+  })
 
   // Initialize Fabric.js canvas
   useEffect(() => {
@@ -368,9 +423,40 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
     }
   }, [clipboardObject]) // Include clipboardObject in dependencies
 
+  // Disable canvas interactions when template is locked
+  useEffect(() => {
+    if (fabricCanvasRef.current) {
+      const canvas = fabricCanvasRef.current
+      if (isTemplateLocked) {
+        // Disable selection and editing
+        canvas.selection = false
+        canvas.getObjects().forEach((obj: any) => {
+          obj.set({
+            selectable: false,
+            evented: false
+          })
+        })
+        canvas.renderAll()
+      } else {
+        // Re-enable selection
+        canvas.selection = true
+        canvas.getObjects().forEach((obj: any) => {
+          // Don't re-enable background shape
+          if (obj !== backgroundShapeObject && obj.excludeFromExport !== true) {
+            obj.set({
+              selectable: true,
+              evented: true
+            })
+          }
+        })
+        canvas.renderAll()
+      }
+    }
+  }, [isTemplateLocked])
+
   // Update canvas when design changes (but not on initial load to prevent duplicates)
   useEffect(() => {
-    if (fabricCanvasRef.current && isInitialized) {
+    if (fabricCanvasRef.current && isInitialized && !isTemplateLocked) {
       // Update background shape if it exists
       if (backgroundShapeObject) {
         updateBackgroundShape()
@@ -1426,6 +1512,12 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
   }
 
   const updateDesign = (key: string, value: any) => {
+    // Don't allow updates if template is locked
+    if (isTemplateLocked) {
+      alert('This template is locked and cannot be modified. Please create a new template or unlock it first.')
+      return
+    }
+    
     setDesign(prev => {
       // Handle nested properties like shadowOffset.x
       if (key.includes('.')) {
@@ -1448,6 +1540,135 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
       }
     })
   }
+
+  // Template Management Functions
+  const loadTemplates = (): StickerTemplate[] => {
+    if (typeof window === 'undefined') return []
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      return stored ? JSON.parse(stored) : []
+    } catch (error) {
+      console.error('Failed to load templates:', error)
+      return []
+    }
+  }
+
+  const saveTemplates = (templatesToSave: StickerTemplate[]) => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(templatesToSave))
+      setTemplates(templatesToSave)
+    } catch (error) {
+      console.error('Failed to save templates:', error)
+      alert('Failed to save template. Please try again.')
+    }
+  }
+
+  const generatePreview = async (): Promise<string> => {
+    if (!fabricCanvasRef.current) return ''
+    
+    const canvas = fabricCanvasRef.current
+    const dataUrl = canvas.toDataURL({ 
+      format: 'png', 
+      multiplier: 0.5, // Smaller preview
+      quality: 0.8
+    })
+    return dataUrl
+  }
+
+  const saveAsTemplate = async (
+    name: string,
+    description: string,
+    shape: 'square' | 'circle' | 'rectangle-landscape' | 'rectangle-portrait',
+    size: '15x15mm' | '20x20mm' | '25x25mm' | '45x45mm',
+    category: 'item' | 'pet' | 'emergency',
+    isLocked: boolean = true
+  ) => {
+    if (!name.trim()) {
+      alert('Please enter a template name')
+      return
+    }
+
+    const preview = await generatePreview()
+    const newTemplate: StickerTemplate = {
+      id: `template-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: name.trim(),
+      description: description.trim() || undefined,
+      design: { ...design },
+      shape,
+      size,
+      category,
+      isLocked,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      preview
+    }
+
+    const existingTemplates = loadTemplates()
+    existingTemplates.push(newTemplate)
+    saveTemplates(existingTemplates)
+    
+    alert(`Template "${name}" saved successfully!`)
+    setShowTemplateLibrary(true)
+  }
+
+  const loadTemplate = async (template: StickerTemplate) => {
+    if (template.isLocked) {
+      setIsTemplateLocked(true)
+      setCurrentTemplate(template)
+    } else {
+      setIsTemplateLocked(false)
+      setCurrentTemplate(null)
+    }
+    
+    setDesign(template.design)
+    
+    // Reload canvas with new design
+    if (fabricCanvasRef.current) {
+      setIsInitialized(false)
+      setTimeout(() => {
+        loadDesignToCanvas()
+        setIsInitialized(true)
+      }, 100)
+    }
+  }
+
+  const deleteTemplate = (templateId: string) => {
+    if (!confirm('Are you sure you want to delete this template?')) return
+    
+    const existingTemplates = loadTemplates()
+    const filtered = existingTemplates.filter(t => t.id !== templateId)
+    saveTemplates(filtered)
+    
+    if (currentTemplate?.id === templateId) {
+      setIsTemplateLocked(false)
+      setCurrentTemplate(null)
+    }
+  }
+
+  const unlockTemplate = () => {
+    setIsTemplateLocked(false)
+    setCurrentTemplate(null)
+  }
+
+  const applySizePreset = (size: '15x15mm' | '20x20mm' | '25x25mm' | '45x45mm') => {
+    if (isTemplateLocked) {
+      alert('Cannot change size on a locked template')
+      return
+    }
+    
+    const preset = SIZE_PRESETS[size]
+    setDesign(prev => ({
+      ...prev,
+      width: preset.width,
+      height: preset.height
+    }))
+  }
+
+  // Load templates on mount
+  useEffect(() => {
+    setTemplates(loadTemplates())
+  }, [])
 
   // Zoom controls
   const handleZoomIn = () => {
@@ -1505,7 +1726,37 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
           </div>
           <div className="h-6 w-px bg-gray-300" />
           <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm" onClick={resetDesign} className="border-gray-300 hover:bg-gray-50">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setShowTemplateLibrary(true)} 
+              className="border-gray-300 hover:bg-gray-50"
+            >
+              <BookOpen className="h-4 w-4 mr-1.5" />
+              Templates
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setShowSaveTemplateDialog(true)} 
+              className="border-gray-300 hover:bg-gray-50"
+              disabled={isTemplateLocked}
+            >
+              <Save className="h-4 w-4 mr-1.5" />
+              Save Template
+            </Button>
+            {isTemplateLocked && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={unlockTemplate} 
+                className="border-orange-300 hover:bg-orange-50 text-orange-700"
+              >
+                <Unlock className="h-4 w-4 mr-1.5" />
+                Unlock
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={resetDesign} className="border-gray-300 hover:bg-gray-50" disabled={isTemplateLocked}>
               <RotateCcw className="h-4 w-4 mr-1.5" />
               Reset
             </Button>
@@ -1532,39 +1783,39 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
           <div className="p-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Add Elements</h3>
             <div className="space-y-2">
-              <Button variant="outline" size="sm" onClick={addText} className="w-full justify-start">
+              <Button variant="outline" size="sm" onClick={addText} className="w-full justify-start" disabled={isTemplateLocked}>
                 <Type className="h-4 w-4 mr-2" />
                 Text
               </Button>
-              <Button variant="outline" size="sm" onClick={addRectangle} className="w-full justify-start">
+              <Button variant="outline" size="sm" onClick={addRectangle} className="w-full justify-start" disabled={isTemplateLocked}>
                 <Square className="h-4 w-4 mr-2" />
                 Rectangle
               </Button>
-              <Button variant="outline" size="sm" onClick={addCircle} className="w-full justify-start">
+              <Button variant="outline" size="sm" onClick={addCircle} className="w-full justify-start" disabled={isTemplateLocked}>
                 <Circle className="h-4 w-4 mr-2" />
                 Circle
               </Button>
-              <Button variant="outline" size="sm" onClick={addTriangle} className="w-full justify-start">
+              <Button variant="outline" size="sm" onClick={addTriangle} className="w-full justify-start" disabled={isTemplateLocked}>
                 <Hexagon className="h-4 w-4 mr-2" />
                 Triangle
               </Button>
-              <Button variant="outline" size="sm" onClick={addPolygon} className="w-full justify-start">
+              <Button variant="outline" size="sm" onClick={addPolygon} className="w-full justify-start" disabled={isTemplateLocked}>
                 <Hexagon className="h-4 w-4 mr-2" />
                 Polygon
               </Button>
-              <Button variant="outline" size="sm" onClick={addLine} className="w-full justify-start">
+              <Button variant="outline" size="sm" onClick={addLine} className="w-full justify-start" disabled={isTemplateLocked}>
                 <Move className="h-4 w-4 mr-2" />
                 Line
               </Button>
-              <Button variant="outline" size="sm" onClick={addArrow} className="w-full justify-start">
+              <Button variant="outline" size="sm" onClick={addArrow} className="w-full justify-start" disabled={isTemplateLocked}>
                 <Move className="h-4 w-4 mr-2" />
                 Arrow
               </Button>
-              <Button variant="outline" size="sm" onClick={addStar} className="w-full justify-start">
+              <Button variant="outline" size="sm" onClick={addStar} className="w-full justify-start" disabled={isTemplateLocked}>
                 <Star className="h-4 w-4 mr-2" />
                 Star
               </Button>
-              <Button variant="outline" size="sm" onClick={addHeart} className="w-full justify-start">
+              <Button variant="outline" size="sm" onClick={addHeart} className="w-full justify-start" disabled={isTemplateLocked}>
                 <Heart className="h-4 w-4 mr-2" />
                 Heart
               </Button>
@@ -1575,15 +1826,16 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                   onChange={handleImageUpload}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   id="image-upload"
+                  disabled={isTemplateLocked}
                 />
-                <Button variant="outline" size="sm" className="w-full justify-start" asChild>
+                <Button variant="outline" size="sm" className="w-full justify-start" asChild disabled={isTemplateLocked}>
                   <label htmlFor="image-upload" className="cursor-pointer">
                     <Upload className="h-4 w-4 mr-2" />
                     Upload Image
                   </label>
                 </Button>
               </div>
-              <Button variant="outline" size="sm" onClick={addImageFromURL} className="w-full justify-start">
+              <Button variant="outline" size="sm" onClick={addImageFromURL} className="w-full justify-start" disabled={isTemplateLocked}>
                 <ImageIcon className="h-4 w-4 mr-2" />
                 Image from URL
               </Button>
@@ -1617,31 +1869,31 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
             <div className="mt-6">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Canvas Tools</h3>
               <div className="space-y-2">
-                <Button variant="outline" size="sm" onClick={deleteSelected} disabled={!selectedObject} className="w-full justify-start">
+                <Button variant="outline" size="sm" onClick={deleteSelected} disabled={!selectedObject || isTemplateLocked} className="w-full justify-start">
                   <Trash2 className="h-4 w-4 mr-2" />
                   Delete
                 </Button>
-                <Button variant="outline" size="sm" onClick={duplicateSelected} disabled={!selectedObject} className="w-full justify-start">
+                <Button variant="outline" size="sm" onClick={duplicateSelected} disabled={!selectedObject || isTemplateLocked} className="w-full justify-start">
                   <Copy className="h-4 w-4 mr-2" />
                   Duplicate
                 </Button>
-                <Button variant="outline" size="sm" onClick={bringToFront} disabled={!selectedObject} className="w-full justify-start">
+                <Button variant="outline" size="sm" onClick={bringToFront} disabled={!selectedObject || isTemplateLocked} className="w-full justify-start">
                   <Layers className="h-4 w-4 mr-2" />
                   Bring to Front
                 </Button>
-                <Button variant="outline" size="sm" onClick={sendToBack} disabled={!selectedObject} className="w-full justify-start">
+                <Button variant="outline" size="sm" onClick={sendToBack} disabled={!selectedObject || isTemplateLocked} className="w-full justify-start">
                   <Layers className="h-4 w-4 mr-2" />
                   Send to Back
                 </Button>
-                <Button variant="outline" size="sm" onClick={lockSelected} disabled={!selectedObject} className="w-full justify-start">
+                <Button variant="outline" size="sm" onClick={lockSelected} disabled={!selectedObject || isTemplateLocked} className="w-full justify-start">
                   <Lock className="h-4 w-4 mr-2" />
                   Lock
                 </Button>
-                <Button variant="outline" size="sm" onClick={unlockAll} className="w-full justify-start">
+                <Button variant="outline" size="sm" onClick={unlockAll} disabled={isTemplateLocked} className="w-full justify-start">
                   <Unlock className="h-4 w-4 mr-2" />
                   Unlock All
                 </Button>
-                <Button variant="destructive" size="sm" onClick={clearCanvas} className="w-full justify-start">
+                <Button variant="destructive" size="sm" onClick={clearCanvas} disabled={isTemplateLocked} className="w-full justify-start">
                   <Trash2 className="h-4 w-4 mr-2" />
                   Clear Canvas
                 </Button>
@@ -2090,12 +2342,67 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
 
             {/* Shape & Size Settings */}
             <div className="border-t pt-4">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Sticker Settings</h3>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                Sticker Settings
+                {isTemplateLocked && (
+                  <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded flex items-center gap-1">
+                    <Lock className="h-3 w-3" />
+                    Locked
+                  </span>
+                )}
+              </h3>
               
               <div className="space-y-4">
+                {/* Size Presets */}
+                <div>
+                  <Label className="text-xs font-medium text-gray-700">Size Preset</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => applySizePreset('15x15mm')}
+                      disabled={isTemplateLocked}
+                    >
+                      15×15mm
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => applySizePreset('20x20mm')}
+                      disabled={isTemplateLocked}
+                    >
+                      20×20mm
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => applySizePreset('25x25mm')}
+                      disabled={isTemplateLocked}
+                    >
+                      25×25mm
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => applySizePreset('45x45mm')}
+                      disabled={isTemplateLocked}
+                    >
+                      45×45mm
+                    </Button>
+                  </div>
+                </div>
+
                 <div>
                   <Label className="text-xs font-medium text-gray-700">Shape</Label>
-                  <Select value={design.shape} onValueChange={(value) => updateDesign('shape', value)}>
+                  <Select 
+                    value={design.shape} 
+                    onValueChange={(value) => updateDesign('shape', value)}
+                    disabled={isTemplateLocked}
+                  >
                     <SelectTrigger className="h-8 text-xs mt-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -2121,6 +2428,7 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                       min="100"
                       max="1000"
                       className="h-8 text-xs mt-1"
+                      disabled={isTemplateLocked}
                     />
                   </div>
                   <div>
@@ -2132,6 +2440,7 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                       min="100"
                       max="1000"
                       className="h-8 text-xs mt-1"
+                      disabled={isTemplateLocked}
                     />
                   </div>
                 </div>
@@ -2165,12 +2474,14 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                       value={design.backgroundColor}
                       onChange={(e) => updateDesign('backgroundColor', e.target.value)}
                       className="w-12 h-8"
+                      disabled={isTemplateLocked}
                     />
                     <Input
                       value={design.backgroundColor}
                       onChange={(e) => updateDesign('backgroundColor', e.target.value)}
                       placeholder="#ffffff"
                       className="h-8 text-xs"
+                      disabled={isTemplateLocked}
                     />
                   </div>
                 </div>
@@ -2185,6 +2496,7 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                     value={design.backgroundOpacity}
                     onChange={(e) => updateDesign('backgroundOpacity', parseFloat(e.target.value))}
                     className="mt-1"
+                    disabled={isTemplateLocked}
                   />
                   <div className="text-xs text-gray-500 mt-1">{Math.round(design.backgroundOpacity * 100)}%</div>
                 </div>
@@ -2196,6 +2508,7 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                     onChange={(e) => updateDesign('backgroundImage', e.target.value)}
                     placeholder="https://example.com/image.jpg"
                     className="h-8 text-xs mt-1"
+                    disabled={isTemplateLocked}
                   />
                 </div>
               </div>
@@ -2215,6 +2528,7 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                     min="0"
                     max="20"
                     className="h-8 text-xs mt-1"
+                    disabled={isTemplateLocked}
                   />
                 </div>
 
@@ -2226,19 +2540,21 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                       value={design.borderColor}
                       onChange={(e) => updateDesign('borderColor', e.target.value)}
                       className="w-12 h-8"
+                      disabled={isTemplateLocked}
                     />
                     <Input
                       value={design.borderColor}
                       onChange={(e) => updateDesign('borderColor', e.target.value)}
                       placeholder="#000000"
                       className="h-8 text-xs"
+                      disabled={isTemplateLocked}
                     />
                   </div>
                 </div>
 
                 <div>
                   <Label className="text-xs font-medium text-gray-700">Border Style</Label>
-                  <Select value={design.borderStyle} onValueChange={(value) => updateDesign('borderStyle', value)}>
+                  <Select value={design.borderStyle} onValueChange={(value) => updateDesign('borderStyle', value)} disabled={isTemplateLocked}>
                     <SelectTrigger className="h-8 text-xs mt-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -2265,12 +2581,13 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                     onChange={(e) => updateDesign('tagline', e.target.value)}
                     placeholder="Scan to Activate"
                     className="h-8 text-xs mt-1"
+                    disabled={isTemplateLocked}
                   />
                 </div>
 
                 <div>
                   <Label className="text-xs font-medium text-gray-700">Font Family</Label>
-                  <Select value={design.taglineFont} onValueChange={(value) => updateDesign('taglineFont', value)}>
+                  <Select value={design.taglineFont} onValueChange={(value) => updateDesign('taglineFont', value)} disabled={isTemplateLocked}>
                     <SelectTrigger className="h-8 text-xs mt-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -2294,6 +2611,7 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                     min="8"
                     max="72"
                     className="h-8 text-xs mt-1"
+                    disabled={isTemplateLocked}
                   />
                 </div>
 
@@ -2305,19 +2623,21 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                       value={design.taglineColor}
                       onChange={(e) => updateDesign('taglineColor', e.target.value)}
                       className="w-12 h-8"
+                      disabled={isTemplateLocked}
                     />
                     <Input
                       value={design.taglineColor}
                       onChange={(e) => updateDesign('taglineColor', e.target.value)}
                       placeholder="#000000"
                       className="h-8 text-xs"
+                      disabled={isTemplateLocked}
                     />
                   </div>
                 </div>
 
                 <div>
                   <Label className="text-xs font-medium text-gray-700">Text Alignment</Label>
-                  <Select value={design.taglineAlign} onValueChange={(value) => updateDesign('taglineAlign', value)}>
+                  <Select value={design.taglineAlign} onValueChange={(value) => updateDesign('taglineAlign', value)} disabled={isTemplateLocked}>
                     <SelectTrigger className="h-8 text-xs mt-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -2342,6 +2662,7 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                     checked={design.shadow}
                     onChange={(e) => updateDesign('shadow', e.target.checked)}
                     className="rounded"
+                    disabled={isTemplateLocked}
                   />
                   <Label className="text-xs font-medium text-gray-700">Drop Shadow</Label>
                 </div>
@@ -2356,12 +2677,14 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                           value={design.shadowColor}
                           onChange={(e) => updateDesign('shadowColor', e.target.value)}
                           className="w-12 h-8"
+                          disabled={isTemplateLocked}
                         />
                         <Input
                           value={design.shadowColor}
                           onChange={(e) => updateDesign('shadowColor', e.target.value)}
                           placeholder="#000000"
                           className="h-8 text-xs"
+                          disabled={isTemplateLocked}
                         />
                       </div>
                     </div>
@@ -2375,6 +2698,7 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                         min="0"
                         max="50"
                         className="h-8 text-xs mt-1"
+                        disabled={isTemplateLocked}
                       />
                     </div>
 
@@ -2388,6 +2712,7 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                           min="-50"
                           max="50"
                           className="h-8 text-xs mt-1"
+                          disabled={isTemplateLocked}
                         />
                       </div>
                       <div>
@@ -2399,6 +2724,7 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
                           min="-50"
                           max="50"
                           className="h-8 text-xs mt-1"
+                          disabled={isTemplateLocked}
                         />
                       </div>
                     </div>
@@ -2445,6 +2771,317 @@ export function QRStickerEditor({ qrCodeUrl, qrCode }: { qrCodeUrl: string; qrCo
           </div>
         </div>
       </div>
+
+      {/* Template Library Modal */}
+      {showTemplateLibrary && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <CardHeader className="flex-shrink-0 border-b">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5" />
+                  Template Library
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setShowTemplateLibrary(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto p-4">
+              {/* Filters */}
+              <div className="mb-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Search className="h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search templates..."
+                    value={templateSearch}
+                    onChange={(e) => setTemplateSearch(e.target.value)}
+                    className="flex-1"
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-xs font-medium text-gray-700 mb-1 block">Shape</Label>
+                    <Select
+                      value={templateFilters.shape || 'all'}
+                      onValueChange={(value) => setTemplateFilters(prev => ({
+                        ...prev,
+                        shape: value === 'all' ? undefined : value as any
+                      }))}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Shapes</SelectItem>
+                        <SelectItem value="square">Square</SelectItem>
+                        <SelectItem value="circle">Circle</SelectItem>
+                        <SelectItem value="rectangle-landscape">Rectangle (Landscape)</SelectItem>
+                        <SelectItem value="rectangle-portrait">Rectangle (Portrait)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium text-gray-700 mb-1 block">Size</Label>
+                    <Select
+                      value={templateFilters.size || 'all'}
+                      onValueChange={(value) => setTemplateFilters(prev => ({
+                        ...prev,
+                        size: value === 'all' ? undefined : value as any
+                      }))}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Sizes</SelectItem>
+                        <SelectItem value="15x15mm">15×15mm</SelectItem>
+                        <SelectItem value="20x20mm">20×20mm</SelectItem>
+                        <SelectItem value="25x25mm">25×25mm</SelectItem>
+                        <SelectItem value="45x45mm">45×45mm</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium text-gray-700 mb-1 block">Category</Label>
+                    <Select
+                      value={templateFilters.category || 'all'}
+                      onValueChange={(value) => setTemplateFilters(prev => ({
+                        ...prev,
+                        category: value === 'all' ? undefined : value as any
+                      }))}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Categories</SelectItem>
+                        <SelectItem value="item">Item</SelectItem>
+                        <SelectItem value="pet">Pet</SelectItem>
+                        <SelectItem value="emergency">Emergency</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Template Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {templates
+                  .filter(template => {
+                    // Search filter
+                    if (templateSearch && !template.name.toLowerCase().includes(templateSearch.toLowerCase()) && 
+                        !template.description?.toLowerCase().includes(templateSearch.toLowerCase())) {
+                      return false
+                    }
+                    // Shape filter
+                    if (templateFilters.shape && template.shape !== templateFilters.shape) {
+                      return false
+                    }
+                    // Size filter
+                    if (templateFilters.size && template.size !== templateFilters.size) {
+                      return false
+                    }
+                    // Category filter
+                    if (templateFilters.category && template.category !== templateFilters.category) {
+                      return false
+                    }
+                    return true
+                  })
+                  .map(template => (
+                    <Card key={template.id} className="relative hover:shadow-md transition-shadow">
+                      {template.isLocked && (
+                        <div className="absolute top-2 right-2 z-10">
+                          <div className="bg-orange-500 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                            <Lock className="h-3 w-3" />
+                            Locked
+                          </div>
+                        </div>
+                      )}
+                      <div className="aspect-square bg-gray-100 flex items-center justify-center p-4">
+                        {template.preview ? (
+                          <img src={template.preview} alt={template.name} className="max-w-full max-h-full object-contain" />
+                        ) : (
+                          <div className="text-gray-400 text-sm">No Preview</div>
+                        )}
+                      </div>
+                      <CardContent className="p-3">
+                        <h4 className="font-semibold text-sm mb-1">{template.name}</h4>
+                        {template.description && (
+                          <p className="text-xs text-gray-600 mb-2">{template.description}</p>
+                        )}
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded capitalize">{template.shape}</span>
+                          <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">{template.size}</span>
+                          <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded capitalize">{template.category}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="flex-1 text-xs"
+                            onClick={() => {
+                              loadTemplate(template)
+                              setShowTemplateLibrary(false)
+                            }}
+                          >
+                            Load
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="text-xs"
+                            onClick={() => {
+                              deleteTemplate(template.id)
+                              setTemplates(loadTemplates())
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+              </div>
+              {templates.filter(template => {
+                if (templateSearch && !template.name.toLowerCase().includes(templateSearch.toLowerCase()) && 
+                    !template.description?.toLowerCase().includes(templateSearch.toLowerCase())) {
+                  return false
+                }
+                if (templateFilters.shape && template.shape !== templateFilters.shape) return false
+                if (templateFilters.size && template.size !== templateFilters.size) return false
+                if (templateFilters.category && template.category !== templateFilters.category) return false
+                return true
+              }).length === 0 && (
+                <div className="text-center py-12 text-gray-500">
+                  <BookOpen className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No templates found. Create your first template!</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Save Template Dialog */}
+      {showSaveTemplateDialog && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Save as Template</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setShowSaveTemplateDialog(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label>Template Name *</Label>
+                <Input
+                  value={saveTemplateData.name}
+                  onChange={(e) => setSaveTemplateData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., Classic Square Item"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Description</Label>
+                <Input
+                  value={saveTemplateData.description}
+                  onChange={(e) => setSaveTemplateData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Optional description"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Shape *</Label>
+                <Select
+                  value={saveTemplateData.shape}
+                  onValueChange={(value) => setSaveTemplateData(prev => ({ ...prev, shape: value as any }))}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="square">Square</SelectItem>
+                    <SelectItem value="circle">Circle</SelectItem>
+                    <SelectItem value="rectangle-landscape">Rectangle (Landscape)</SelectItem>
+                    <SelectItem value="rectangle-portrait">Rectangle (Portrait)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Size *</Label>
+                <Select
+                  value={saveTemplateData.size}
+                  onValueChange={(value) => setSaveTemplateData(prev => ({ ...prev, size: value as any }))}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15x15mm">15×15mm</SelectItem>
+                    <SelectItem value="20x20mm">20×20mm</SelectItem>
+                    <SelectItem value="25x25mm">25×25mm</SelectItem>
+                    <SelectItem value="45x45mm">45×45mm</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Category *</Label>
+                <Select
+                  value={saveTemplateData.category}
+                  onValueChange={(value) => setSaveTemplateData(prev => ({ ...prev, category: value as any }))}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="item">Item</SelectItem>
+                    <SelectItem value="pet">Pet</SelectItem>
+                    <SelectItem value="emergency">Emergency</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowSaveTemplateDialog(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={async () => {
+                    await saveAsTemplate(
+                      saveTemplateData.name,
+                      saveTemplateData.description,
+                      saveTemplateData.shape,
+                      saveTemplateData.size,
+                      saveTemplateData.category,
+                      true // Always locked by default
+                    )
+                    setShowSaveTemplateDialog(false)
+                    setSaveTemplateData({
+                      name: '',
+                      description: '',
+                      shape: 'square',
+                      size: '25x25mm',
+                      category: 'item'
+                    })
+                    setTemplates(loadTemplates())
+                  }}
+                  disabled={!saveTemplateData.name.trim()}
+                >
+                  Save Template
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
