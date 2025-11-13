@@ -23,7 +23,6 @@ export function QRCodeGenerator() {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [exportFormat, setExportFormat] = useState<"png" | "svg" | "pdf" | "txt">("png")
-  const [showStickerEditor, setShowStickerEditor] = useState(false)
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -76,6 +75,55 @@ export function QRCodeGenerator() {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+    }
+  }
+
+  const downloadTransparentPNG = () => {
+    if (!generatedQR) return
+
+    const img = new window.Image()
+    img.crossOrigin = "anonymous"
+    img.src = generatedQR.qrImageUrl
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')
+
+      if (!ctx) {
+        console.error("Unable to create canvas context for transparent export")
+        return
+      }
+
+      ctx.drawImage(img, 0, 0)
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const data = imageData.data
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i]
+        const g = data[i + 1]
+        const b = data[i + 2]
+
+        // Treat near-white pixels as transparent
+        if (r > 240 && g > 240 && b > 240) {
+          data[i + 3] = 0
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0)
+
+      const link = document.createElement('a')
+      link.href = canvas.toDataURL('image/png')
+      link.download = `qr-code-${generatedQR.code}-transparent.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
+
+    img.onerror = (error) => {
+      console.error("Failed to load QR image for transparent export", error)
+      alert("Unable to create transparent PNG. Please try again.")
     }
   }
 
@@ -402,13 +450,30 @@ Generated on: ${new Date().toLocaleString()}
                   </Button>
                 </div>
 
-                {/* Sticker Editor Button */}
+                {/* Photopea Editor Button */}
                 <Button
-                  onClick={() => setShowStickerEditor(true)}
+                  onClick={() => {
+                    if (generatedQR) {
+                      // Open Photopea in new tab with 900x900 canvas
+                      const canvasWidth = 900
+                      const canvasHeight = 900
+                      const dpi = 300             // High DPI for print quality
+                      // Photopea URL format with new document settings
+                      const photopeaConfig = {
+                        files: [generatedQR.qrImageUrl],
+                        environment: {
+                          newdoc: [canvasWidth, canvasHeight, "px", dpi, "RGB"]
+                        }
+                      }
+                      const photopeaUrl = `https://www.photopea.com/#${encodeURIComponent(JSON.stringify(photopeaConfig))}`
+                      window.open(photopeaUrl, '_blank')
+                    }
+                  }}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  disabled={!generatedQR}
                 >
                   <Palette className="h-4 w-4 mr-2" />
-                  Design Custom Sticker
+                  Edit in Photopea (Free)
                 </Button>
                 
                 {/* Quick Export Buttons */}
@@ -423,6 +488,15 @@ Generated on: ${new Date().toLocaleString()}
                     >
                       <FileImage className="h-4 w-4 mr-1" />
                       PNG
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={downloadTransparentPNG}
+                      className="flex items-center justify-center"
+                    >
+                      <FileImage className="h-4 w-4 mr-1" />
+                      PNG (Transparent)
                     </Button>
                     <Button
                       variant="outline"
@@ -459,39 +533,6 @@ Generated on: ${new Date().toLocaleString()}
         )}
       </div>
 
-      {/* Navigate to full-screen editor */}
-      {showStickerEditor && generatedQR && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 text-center">
-            <h3 className="text-xl font-bold mb-4">Open Full-Screen Editor</h3>
-            <p className="text-gray-600 mb-6">
-              The QR sticker editor will open in a new full-screen page for the best editing experience.
-            </p>
-            <div className="flex space-x-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowStickerEditor(false)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  const params = new URLSearchParams({
-                    qrCodeUrl: generatedQR.qrImageUrl,
-                    qrCode: generatedQR.code
-                  })
-                  window.open(`/qr-editor?${params.toString()}`, '_blank')
-                  setShowStickerEditor(false)
-                }}
-                className="flex-1"
-              >
-                Open Editor
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
