@@ -127,6 +127,63 @@ export function QRCodeGenerator() {
     }
   }
 
+  const downloadTransparentWhitePNG = () => {
+    if (!generatedQR) return
+
+    const img = new window.Image()
+    img.crossOrigin = "anonymous"
+    img.src = generatedQR.qrImageUrl
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')
+
+      if (!ctx) {
+        console.error("Unable to create canvas context for transparent white export")
+        return
+      }
+
+      ctx.drawImage(img, 0, 0)
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const data = imageData.data
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i]
+        const g = data[i + 1]
+        const b = data[i + 2]
+
+        const brightness = (r + g + b) / 3
+
+        if (brightness > 240) {
+          // Original white background -> transparent
+          data[i + 3] = 0
+        } else {
+          // Dark QR modules -> make white and opaque
+          data[i] = 255
+          data[i + 1] = 255
+          data[i + 2] = 255
+          data[i + 3] = 255
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0)
+
+      const link = document.createElement('a')
+      link.href = canvas.toDataURL('image/png')
+      link.download = `qr-code-${generatedQR.code}-transparent-white.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
+
+    img.onerror = (error) => {
+      console.error("Failed to load QR image for transparent white export", error)
+      alert("Unable to create transparent white PNG. Please try again.")
+    }
+  }
+
   const downloadAsSVG = () => {
     if (!generatedQR) return
 
@@ -497,6 +554,15 @@ Generated on: ${new Date().toLocaleString()}
                     >
                       <FileImage className="h-4 w-4 mr-1" />
                       PNG (Transparent)
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={downloadTransparentWhitePNG}
+                      className="flex items-center justify-center"
+                    >
+                      <FileImage className="h-4 w-4 mr-1" />
+                      PNG (Transparent White)
                     </Button>
                     <Button
                       variant="outline"
