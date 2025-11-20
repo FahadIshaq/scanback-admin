@@ -9,20 +9,141 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Download, Copy, Check, FileImage, FileText, File, Palette } from "lucide-react"
 import adminApiClient from "@/lib/api"
+import jsPDF from "jspdf"
+
+type GeneratedQR = {
+  code: string
+  qrImageUrl: string
+  qrUrl: string
+}
+
+type GenerationMode = "connected" | "unique"
+
+const DEFAULT_QR_COLOR = "#000000"
+
+const hexToRgb = (hexColor: string) => {
+  if (!hexColor) {
+    return { r: 0, g: 0, b: 0 }
+  }
+
+  let normalized = hexColor.replace("#", "").trim()
+  if (normalized.length === 3) {
+    normalized = normalized
+      .split("")
+      .map(char => char + char)
+      .join("")
+  }
+
+  if (normalized.length !== 6 || Number.isNaN(parseInt(normalized, 16))) {
+    return { r: 0, g: 0, b: 0 }
+  }
+
+  const numericValue = parseInt(normalized, 16)
+  return {
+    r: (numericValue >> 16) & 255,
+    g: (numericValue >> 8) & 255,
+    b: numericValue & 255
+  }
+}
 
 export function QRCodeGenerator() {
   const [formData, setFormData] = useState({
     type: "item" as "item" | "pet" | "emergency" | "any"
   })
 
-  const [generatedQR, setGeneratedQR] = useState<{
-    code: string
-    qrImageUrl: string
-    qrUrl: string
-  } | null>(null)
+  const [generatedQRCodes, setGeneratedQRCodes] = useState<GeneratedQR[]>([])
+  const [generationMode, setGenerationMode] = useState<GenerationMode>("connected")
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [exportFormat, setExportFormat] = useState<"png" | "svg" | "pdf" | "txt">("png")
+  const [copiesCount, setCopiesCount] = useState(50)
+  const [uniqueCount, setUniqueCount] = useState(50)
+  const [lineColor, setLineColor] = useState(DEFAULT_QR_COLOR)
+  const [transparentBackground, setTransparentBackground] = useState(true)
+  const [isBuildingSheet, setIsBuildingSheet] = useState(false)
+
+  const primaryQR = generatedQRCodes[0] ?? null
+  const hasGeneratedCodes = generatedQRCodes.length > 0
+
+  const sanitizeCount = (value: number) => {
+    if (Number.isNaN(value)) return 1
+    return Math.min(500, Math.max(1, Math.floor(value)))
+  }
+
+  const normalizeColorValue = (value: string) => {
+    if (!value) return DEFAULT_QR_COLOR
+    let normalized = value.trim()
+    if (!normalized.startsWith("#")) {
+      normalized = `#${normalized}`
+    }
+    if (normalized.length === 4) {
+      normalized = `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`
+    }
+    if (normalized.length !== 7) {
+      normalized = DEFAULT_QR_COLOR
+    }
+    return normalized
+  }
+
+  const handleLineColorChange = (value: string) => {
+    setLineColor(normalizeColorValue(value))
+  }
+
+  const stylizeQRImage = (imageUrl: string, options?: { lineColor?: string; transparentBackground?: boolean }) => {
+    return new Promise<HTMLCanvasElement>((resolve, reject) => {
+      const img = new window.Image()
+      img.crossOrigin = "anonymous"
+      img.src = imageUrl
+
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+
+        if (!ctx) {
+          reject(new Error("Unable to create canvas context"))
+          return
+        }
+
+        ctx.drawImage(img, 0, 0)
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const data = imageData.data
+        const { r: lineR, g: lineG, b: lineB } = hexToRgb(options?.lineColor || DEFAULT_QR_COLOR)
+        const makeTransparent = options?.transparentBackground !== false
+
+        for (let i = 0; i < data.length; i += 4) {
+          const pixelR = data[i]
+          const pixelG = data[i + 1]
+          const pixelB = data[i + 2]
+          const brightness = (pixelR + pixelG + pixelB) / 3
+
+          if (brightness > 240) {
+            if (makeTransparent) {
+              data[i + 3] = 0
+            } else {
+              data[i] = 255
+              data[i + 1] = 255
+              data[i + 2] = 255
+              data[i + 3] = 255
+            }
+          } else {
+            data[i] = lineR
+            data[i + 1] = lineG
+            data[i + 2] = lineB
+            data[i + 3] = 255
+          }
+        }
+
+        ctx.putImageData(imageData, 0, 0)
+        resolve(canvas)
+      }
+
+      img.onerror = (error) => {
+        reject(error)
+      }
+    })
+  }
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -31,6 +152,7 @@ export function QRCodeGenerator() {
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setGeneratedQRCodes([])
 
       try {
         // Admin generates blank QR codes - users fill all details when scanning
@@ -40,14 +162,41 @@ export function QRCodeGenerator() {
           contact: {}
         }
 
+      if (generationMode === "connected") {
       const response = await adminApiClient.generateQRCode(qrData) as any
       
       if (response.success) {
-        setGeneratedQR({
+          setGeneratedQRCodes([{
+            code: response.data.qrCode.code,
+            qrImageUrl: response.data.qrImageDataURL,
+            qrUrl: response.data.qrUrl
+          }])
+        }
+      } else {
+        const desiredUniqueCount = sanitizeCount(uniqueCount)
+        setUniqueCount(desiredUniqueCount)
+
+        const created: GeneratedQR[] = []
+        for (let i = 0; i < desiredUniqueCount; i += 1) {
+          const response = await adminApiClient.generateQRCode(qrData) as any
+          if (response.success) {
+            created.push({
           code: response.data.qrCode.code,
           qrImageUrl: response.data.qrImageDataURL,
           qrUrl: response.data.qrUrl
         })
+          }
+        }
+
+        if (created.length === 0) {
+          throw new Error("No QR codes were generated. Please try again.")
+        }
+
+        if (created.length < desiredUniqueCount) {
+          alert(`Only ${created.length} of ${desiredUniqueCount} QR codes were created. The available codes are ready for export.`)
+        }
+
+        setGeneratedQRCodes(created)
       }
     } catch (error: unknown) {
       console.error("Failed to generate QR code:", error)
@@ -68,130 +217,180 @@ export function QRCodeGenerator() {
   }
 
   const downloadQR = () => {
-    if (generatedQR) {
-      const link = document.createElement('a')
-      link.href = generatedQR.qrImageUrl
-      link.download = `qr-code-${generatedQR.code}.png`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-    }
+    if (!primaryQR) return
+
+    const link = document.createElement('a')
+    link.href = primaryQR.qrImageUrl
+    link.download = `qr-code-${primaryQR.code}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
-  const downloadTransparentPNG = () => {
-    if (!generatedQR) return
+  const downloadTransparentPNG = async () => {
+    if (!primaryQR) return
 
-    const img = new window.Image()
-    img.crossOrigin = "anonymous"
-    img.src = generatedQR.qrImageUrl
-
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
-      const ctx = canvas.getContext('2d')
-
-      if (!ctx) {
-        console.error("Unable to create canvas context for transparent export")
-        return
-      }
-
-      ctx.drawImage(img, 0, 0)
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      const data = imageData.data
-
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i]
-        const g = data[i + 1]
-        const b = data[i + 2]
-
-        // Treat near-white pixels as transparent
-        if (r > 240 && g > 240 && b > 240) {
-          data[i + 3] = 0
-        }
-      }
-
-      ctx.putImageData(imageData, 0, 0)
-
+    try {
+      const canvas = await stylizeQRImage(primaryQR.qrImageUrl, {
+        lineColor: DEFAULT_QR_COLOR,
+        transparentBackground: true
+      })
       const link = document.createElement('a')
       link.href = canvas.toDataURL('image/png')
-      link.download = `qr-code-${generatedQR.code}-transparent.png`
+      link.download = `qr-code-${primaryQR.code}-transparent.png`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-    }
-
-    img.onerror = (error) => {
-      console.error("Failed to load QR image for transparent export", error)
+    } catch (error) {
+      console.error("Failed to create transparent PNG", error)
       alert("Unable to create transparent PNG. Please try again.")
     }
   }
 
-  const downloadTransparentWhitePNG = () => {
-    if (!generatedQR) return
+  const downloadStyledPNG = async () => {
+    if (!primaryQR) return
 
-    const img = new window.Image()
-    img.crossOrigin = "anonymous"
-    img.src = generatedQR.qrImageUrl
-
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
-      const ctx = canvas.getContext('2d')
-
-      if (!ctx) {
-        console.error("Unable to create canvas context for transparent white export")
-        return
-      }
-
-      ctx.drawImage(img, 0, 0)
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      const data = imageData.data
-
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i]
-        const g = data[i + 1]
-        const b = data[i + 2]
-
-        const brightness = (r + g + b) / 3
-
-        if (brightness > 240) {
-          // Original white background -> transparent
-          data[i + 3] = 0
-        } else {
-          // Dark QR modules -> make white and opaque
-          data[i] = 255
-          data[i + 1] = 255
-          data[i + 2] = 255
-          data[i + 3] = 255
-        }
-      }
-
-      ctx.putImageData(imageData, 0, 0)
-
+    try {
+      const canvas = await stylizeQRImage(primaryQR.qrImageUrl, {
+        lineColor,
+        transparentBackground
+      })
       const link = document.createElement('a')
       link.href = canvas.toDataURL('image/png')
-      link.download = `qr-code-${generatedQR.code}-transparent-white.png`
+      link.download = `qr-code-${primaryQR.code}-styled.png`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+    } catch (error) {
+      console.error("Failed to create styled PNG", error)
+      alert("Unable to create the styled PNG. Please try again.")
+    }
+  }
+
+  const downloadSheetPDF = async () => {
+    if (generationMode === "connected" && !primaryQR) return
+    if (generationMode === "unique" && generatedQRCodes.length === 0) return
+
+    const desiredCopies = generationMode === "connected"
+      ? sanitizeCount(copiesCount)
+      : generatedQRCodes.length
+
+    if (generationMode === "connected") {
+      setCopiesCount(desiredCopies)
     }
 
-    img.onerror = (error) => {
-      console.error("Failed to load QR image for transparent white export", error)
+    if (desiredCopies === 0) {
+      alert("No QR codes are available for export yet.")
+      return
+    }
+
+    setIsBuildingSheet(true)
+    try {
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4"
+      })
+
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const margin = 5
+      const codeSizeMm = 20
+      const gapMm = 2
+
+      const usableWidth = pageWidth - margin * 2
+      const usableHeight = pageHeight - margin * 2
+      const columns = Math.max(1, Math.floor((usableWidth + gapMm) / (codeSizeMm + gapMm)))
+      const rowsPerPage = Math.max(1, Math.floor((usableHeight + gapMm) / (codeSizeMm + gapMm)))
+      const codesPerPage = columns * rowsPerPage
+
+      if (codesPerPage === 0) {
+        throw new Error("Page format cannot accommodate the requested QR size.")
+      }
+
+      let qrImages: string[] = []
+
+      if (generationMode === "connected" && primaryQR) {
+        const canvas = await stylizeQRImage(primaryQR.qrImageUrl, {
+          lineColor,
+          transparentBackground
+        })
+        const dataUrl = canvas.toDataURL("image/png")
+        qrImages = Array.from({ length: desiredCopies }, () => dataUrl)
+      } else {
+        const styledCanvases = await Promise.all(
+          generatedQRCodes.map(code =>
+            stylizeQRImage(code.qrImageUrl, {
+              lineColor,
+              transparentBackground
+            })
+          )
+        )
+        qrImages = styledCanvases.map(canvas => canvas.toDataURL("image/png"))
+      }
+
+      let placed = 0
+      let currentPage = 0
+
+      while (placed < qrImages.length) {
+        if (currentPage > 0) {
+          pdf.addPage()
+        }
+
+        for (let row = 0; row < rowsPerPage && placed < qrImages.length; row++) {
+          for (let col = 0; col < columns && placed < qrImages.length; col++) {
+            const x = margin + col * (codeSizeMm + gapMm)
+            const y = margin + row * (codeSizeMm + gapMm)
+            pdf.addImage(qrImages[placed], "PNG", x, y, codeSizeMm, codeSizeMm, undefined, "FAST")
+            placed += 1
+          }
+        }
+
+        currentPage += 1
+      }
+
+      const filename =
+        generationMode === "connected" && primaryQR
+          ? `qr-code-${primaryQR.code}-x${desiredCopies}`
+          : `qr-batch-${generatedQRCodes.length}-codes`
+
+      pdf.save(`${filename}.pdf`)
+    } catch (error) {
+      console.error("Failed to build PDF sheet", error)
+      alert("Unable to build the PDF sheet. Please try again.")
+    } finally {
+      setIsBuildingSheet(false)
+    }
+  }
+
+  const downloadTransparentWhitePNG = async () => {
+    if (!primaryQR) return
+
+    try {
+      const canvas = await stylizeQRImage(primaryQR.qrImageUrl, {
+        lineColor: "#FFFFFF",
+        transparentBackground: true
+      })
+      const link = document.createElement('a')
+      link.href = canvas.toDataURL('image/png')
+      link.download = `qr-code-${primaryQR.code}-transparent-white.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (error) {
+      console.error("Failed to create transparent white PNG", error)
       alert("Unable to create transparent white PNG. Please try again.")
     }
   }
 
   const downloadAsSVG = () => {
-    if (!generatedQR) return
+    if (!primaryQR) return
 
     const svgContent = `
       <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
         <rect width="200" height="200" fill="white" stroke="#000" stroke-width="2"/>
         <text x="100" y="100" text-anchor="middle" font-family="monospace" font-size="12" fill="#000">
-          QR Code: ${generatedQR.code}
+          QR Code: ${primaryQR.code}
         </text>
         <text x="100" y="120" text-anchor="middle" font-family="monospace" font-size="10" fill="#666">
           Type: ${formData.type.toUpperCase()}
@@ -206,7 +405,7 @@ export function QRCodeGenerator() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `qr-code-${generatedQR.code}.svg`
+    link.download = `qr-code-${primaryQR.code}.svg`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -214,7 +413,7 @@ export function QRCodeGenerator() {
   }
 
   const downloadAsPDF = () => {
-    if (!generatedQR) return
+    if (!primaryQR) return
 
     const pdfContent = `
       %PDF-1.4
@@ -250,7 +449,7 @@ export function QRCodeGenerator() {
       BT
       /F1 12 Tf
       100 700 Td
-      (QR Code: ${generatedQR.code}) Tj
+      (QR Code: ${primaryQR.code}) Tj
       0 -20 Td
       (Type: ${formData.type.toUpperCase()}) Tj
       0 -20 Td
@@ -280,7 +479,7 @@ export function QRCodeGenerator() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `qr-code-${generatedQR.code}.pdf`
+    link.download = `qr-code-${primaryQR.code}.pdf`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -288,15 +487,15 @@ export function QRCodeGenerator() {
   }
 
   const downloadAsTXT = () => {
-    if (!generatedQR) return
+    if (!primaryQR) return
 
     const txtContent = `
 QR Code Information
 ==================
 
-Code: ${generatedQR.code}
+Code: ${primaryQR.code}
 Type: ${formData.type.toUpperCase()}
-Scan URL: ${generatedQR.qrUrl}
+Scan URL: ${primaryQR.qrUrl}
 
 Instructions:
 1. Print this QR code or save the image
@@ -312,7 +511,7 @@ Generated on: ${new Date().toLocaleString()}
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `qr-code-${generatedQR.code}.txt`
+    link.download = `qr-code-${primaryQR.code}.txt`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -373,6 +572,46 @@ Generated on: ${new Date().toLocaleString()}
                 <p className="text-xs text-gray-500">Four types are available: Item, Pet, Emergency, and Any Type</p>
               </div>
 
+              <div className="space-y-2">
+                <Label>QR Mode</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={generationMode === "connected" ? "default" : "outline"}
+                    onClick={() => setGenerationMode("connected")}
+                    className="w-full"
+                  >
+                    Connected
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={generationMode === "unique" ? "default" : "outline"}
+                    onClick={() => setGenerationMode("unique")}
+                    className="w-full"
+                  >
+                    Unique
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Connected = create one QR and duplicate it. Unique = generate multiple brand-new QR codes at once.
+                </p>
+              </div>
+
+              {generationMode === "unique" && (
+                <div className="space-y-2">
+                  <Label htmlFor="uniqueCount">How many unique QR codes?</Label>
+                  <Input
+                    id="uniqueCount"
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={uniqueCount}
+                    onChange={event => setUniqueCount(Number(event.target.value))}
+                  />
+                  <p className="text-xs text-gray-500">We recommend batches of up to 200 at a time.</p>
+                </div>
+              )}
+
               {/* No additional fields needed - users will fill everything when scanning */}
 
               {/* Note about the process */}
@@ -405,18 +644,18 @@ Generated on: ${new Date().toLocaleString()}
         </Card>
 
         {/* Generated QR Code */}
-        {generatedQR && (
+        {hasGeneratedCodes && primaryQR && (
           <Card>
             <CardHeader>
               <CardTitle>✅ QR Code Generated Successfully!</CardTitle>
               <CardDescription>
-                Code: {generatedQR.code} | Type: {formData.type.toUpperCase()}
+                Primary Code: {primaryQR.code} | Mode: {generationMode === "connected" ? "Connected (identical copies)" : "Unique batch"} | Type: {formData.type.toUpperCase()}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-center">
                 <Image
-                  src={generatedQR.qrImageUrl}
+                  src={primaryQR.qrImageUrl}
                   alt="Generated QR Code"
                   width={192}
                   height={192}
@@ -436,19 +675,37 @@ Generated on: ${new Date().toLocaleString()}
                   <strong>Export Options:</strong> Choose from PNG, SVG, PDF, or TXT formats below.
                 </p>
               </div>
+
+              {generationMode === "unique" && (
+                <div className="bg-gray-50 border border-dashed border-gray-200 rounded-lg p-4">
+                  <p className="text-sm text-gray-700">
+                    Generated <strong>{generatedQRCodes.length}</strong> unique QR codes. First few codes:
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {generatedQRCodes.slice(0, 8).map(code => (
+                      <span key={code.code} className="text-xs font-mono bg-white border rounded px-2 py-1">
+                        {code.code}
+                      </span>
+                    ))}
+                    {generatedQRCodes.length > 8 && (
+                      <span className="text-xs text-gray-500">+{generatedQRCodes.length - 8} more</span>
+                    )}
+                  </div>
+                </div>
+              )}
               
               <div className="space-y-2">
                 <Label>Scan URL (for testing)</Label>
                 <div className="flex space-x-2">
                   <Input
-                    value={generatedQR.qrUrl}
+                    value={primaryQR.qrUrl}
                     readOnly
                     className="flex-1"
                   />
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => copyToClipboard(generatedQR.qrUrl)}
+                    onClick={() => copyToClipboard(primaryQR.qrUrl)}
                   >
                     {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                   </Button>
@@ -500,7 +757,7 @@ Generated on: ${new Date().toLocaleString()}
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => setGeneratedQR(null)}
+                    onClick={() => setGeneratedQRCodes([])}
                     className="w-full"
                   >
                     Generate New
@@ -510,14 +767,14 @@ Generated on: ${new Date().toLocaleString()}
                 {/* Photopea Editor Button */}
                 <Button
                   onClick={() => {
-                    if (generatedQR) {
+                    if (primaryQR && generationMode === "connected") {
                       // Open Photopea in new tab with 900x900 canvas
                       const canvasWidth = 900
                       const canvasHeight = 900
                       const dpi = 300             // High DPI for print quality
                       // Photopea URL format with new document settings
                       const photopeaConfig = {
-                        files: [generatedQR.qrImageUrl],
+                        files: [primaryQR.qrImageUrl],
                         environment: {
                           newdoc: [canvasWidth, canvasHeight, "px", dpi, "RGB"]
                         }
@@ -527,12 +784,45 @@ Generated on: ${new Date().toLocaleString()}
                     }
                   }}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                  disabled={!generatedQR}
+                  disabled={!primaryQR || generationMode === "unique"}
+                  title={generationMode === "unique" ? "Photopea editing is available for single (connected) QR codes." : undefined}
                 >
                   <Palette className="h-4 w-4 mr-2" />
                   Edit in Photopea (Free)
                 </Button>
                 
+                <div className="space-y-2 border rounded-lg p-3">
+                  <div>
+                    <Label htmlFor="lineColorPicker">QR Styling</Label>
+                    <p className="text-xs text-gray-500">Set the line color and transparency before exporting styled PNGs or PDF sheets.</p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                    <div className="flex items-center gap-3">
+                      <input
+                        id="lineColorPicker"
+                        type="color"
+                        value={lineColor}
+                        onChange={event => handleLineColorChange(event.target.value)}
+                        className="h-10 w-14 rounded border border-gray-300"
+                      />
+                      <Input
+                        value={lineColor}
+                        onChange={event => handleLineColorChange(event.target.value)}
+                        className="w-32"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={transparentBackground}
+                        onChange={event => setTransparentBackground(event.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      Remove background (transparent)
+                    </label>
+                  </div>
+                </div>
+
                 {/* Quick Export Buttons */}
                 <div className="space-y-2">
                   <p className="text-sm text-gray-600">Quick Export:</p>
@@ -567,6 +857,15 @@ Generated on: ${new Date().toLocaleString()}
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={downloadStyledPNG}
+                      className="flex items-center justify-center"
+                    >
+                      <FileImage className="h-4 w-4 mr-1" />
+                      PNG (Styled)
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={downloadAsSVG}
                       className="flex items-center justify-center"
                     >
@@ -592,6 +891,49 @@ Generated on: ${new Date().toLocaleString()}
                       TXT
                     </Button>
                   </div>
+                </div>
+
+                {/* Bulk PDF Sheet */}
+                <div className="space-y-2 border rounded-lg p-3">
+                  <div>
+                    <Label htmlFor="copiesCount">Bulk Print Sheet</Label>
+                    <p className="text-xs text-gray-500">
+                      Create a high-resolution A4 PDF grid using the styling options above.
+                    </p>
+                  </div>
+                  {generationMode === "connected" ? (
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <Input
+                        id="copiesCount"
+                        type="number"
+                        min={1}
+                        max={500}
+                        value={copiesCount}
+                        onChange={event => setCopiesCount(Number(event.target.value))}
+                        className="w-full sm:w-32"
+                      />
+                      <Button
+                        onClick={downloadSheetPDF}
+                        disabled={isBuildingSheet || !primaryQR}
+                        className="w-full sm:flex-1"
+                      >
+                        {isBuildingSheet ? "Building PDF..." : `Download ${sanitizeCount(copiesCount)} Copies PDF`}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm text-gray-600">
+                        Unique codes ready: <span className="font-mono">{generatedQRCodes.length}</span>
+                      </p>
+                      <Button
+                        onClick={downloadSheetPDF}
+                        disabled={isBuildingSheet || generatedQRCodes.length === 0}
+                        className="w-full"
+                      >
+                        {isBuildingSheet ? "Building PDF..." : `Download ${generatedQRCodes.length} Unique Codes PDF`}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
