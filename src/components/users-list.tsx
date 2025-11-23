@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Users, Search, Filter, Mail, Phone, Calendar, MoreHorizontal } from "lucide-react"
+import { Users, Search, Filter, Mail, Phone, Calendar, MoreHorizontal, Eye, QrCode } from "lucide-react"
 import adminApiClient from "@/lib/api"
 import { formatDate } from "@/lib/utils"
+import { UserDetailModal } from "@/components/user-detail-modal"
 
 interface User {
   _id: string
@@ -15,6 +16,8 @@ interface User {
   email: string
   phone: string
   isEmailVerified: boolean
+  isActive: boolean
+  qrCodesCount?: number
   stats: {
     totalItems: number
     totalPets: number
@@ -23,7 +26,7 @@ interface User {
   }
   createdAt: string
   lastLogin?: string
-  status: "active" | "inactive" | "suspended"
+  status?: "active" | "inactive" | "suspended"
 }
 
 export function UsersList() {
@@ -33,6 +36,8 @@ export function UsersList() {
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
 
   useEffect(() => {
     loadUsers()
@@ -65,7 +70,8 @@ export function UsersList() {
     return matchesSearch
   })
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (user: User) => {
+    const status = user.status || (user.isActive ? "active" : "inactive")
     switch (status) {
       case "active": return "bg-green-100 text-green-800"
       case "inactive": return "bg-gray-100 text-gray-800"
@@ -74,22 +80,32 @@ export function UsersList() {
     }
   }
 
+  const getUserStatus = (user: User) => {
+    return user.status || (user.isActive ? "active" : "inactive")
+  }
+
   const handleStatusChange = async (userId: string, newStatus: string) => {
     try {
       await adminApiClient.updateUserStatus(userId, newStatus)
       setUsers(prev => prev.map(user => 
-        user._id === userId ? { ...user, status: newStatus as any } : user
+        user._id === userId ? { ...user, status: newStatus as any, isActive: newStatus === "active" } : user
       ))
     } catch (error) {
       console.error("Failed to update user status:", error)
+      alert("Failed to update user status")
     }
+  }
+
+  const handleViewDetails = (userId: string) => {
+    setSelectedUserId(userId)
+    setDetailModalOpen(true)
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Users Management</h2>
-        <p className="text-gray-600">View and manage all registered users</p>
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Users Management</h2>
+        <p className="text-sm sm:text-base text-gray-600">View and manage all registered users</p>
       </div>
 
       {/* Filters */}
@@ -149,70 +165,192 @@ export function UsersList() {
               <p className="text-gray-500">No users found</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {filteredUsers.map((user) => (
-                <div key={user._id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-4">
-                      <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                        <Users className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <h3 className="font-medium text-gray-900">{user.name}</h3>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(user.status)}`}>
-                            {user.status}
-                          </span>
-                          {user.isEmailVerified && (
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                              Verified
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-700 uppercase tracking-wider">User</th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-700 uppercase tracking-wider">Email</th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-700 uppercase tracking-wider">Phone</th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-700 uppercase tracking-wider">Verified</th>
+                      <th className="text-center py-3 px-4 text-xs font-medium text-gray-700 uppercase tracking-wider">QR Codes</th>
+                      <th className="text-center py-3 px-4 text-xs font-medium text-gray-700 uppercase tracking-wider">Items</th>
+                      <th className="text-center py-3 px-4 text-xs font-medium text-gray-700 uppercase tracking-wider">Pets</th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-700 uppercase tracking-wider">Joined</th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-700 uppercase tracking-wider">Last Login</th>
+                      <th className="text-center py-3 px-4 text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {filteredUsers.map((user) => (
+                      <tr key={user._id} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                              <Users className="h-4 w-4 text-primary" />
+                            </div>
+                            <div>
+                              <div className="font-medium text-sm text-gray-900">{user.name}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-sm text-gray-900">{user.email}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-sm text-gray-600">{user.phone}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <Select
+                            value={getUserStatus(user)}
+                            onValueChange={(value) => handleStatusChange(user._id, value)}
+                          >
+                            <SelectTrigger className="w-28 h-7 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="inactive">Inactive</SelectItem>
+                              <SelectItem value="suspended">Suspended</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="py-3 px-4">
+                          {user.isEmailVerified ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                              No
                             </span>
                           )}
-                        </div>
-                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
-                          <div className="flex items-center space-x-1">
-                            <Mail className="h-4 w-4" />
-                            <span>{user.email}</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <QrCode className="h-3 w-3 text-gray-400" />
+                            <span className="font-semibold text-sm">{user.qrCodesCount || 0}</span>
                           </div>
-                          <div className="flex items-center space-x-1">
-                            <Phone className="h-4 w-4" />
-                            <span>{user.phone}</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="text-sm font-medium">{user.stats?.totalItems || 0}</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="text-sm font-medium">{user.stats?.totalPets || 0}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-xs text-gray-600">
+                            {formatDate(user.createdAt)}
                           </div>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs text-gray-500 mb-2">
-                          <div>
-                            <span className="font-medium">Items:</span> {user.stats.totalItems}
-                          </div>
-                          <div>
-                            <span className="font-medium">Pets:</span> {user.stats.totalPets}
-                          </div>
-                          <div>
-                            <span className="font-medium">Found Items:</span> {user.stats.itemsFound}
-                          </div>
-                          <div>
-                            <span className="font-medium">Found Pets:</span> {user.stats.petsFound}
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-4 text-xs text-gray-500">
-                          <div className="flex items-center space-x-1">
-                            <Calendar className="h-3 w-3" />
-                            <span>Joined: {formatDate(user.createdAt)}</span>
-                          </div>
-                          {user.lastLogin && (
-                            <div className="flex items-center space-x-1">
-                              <Calendar className="h-3 w-3" />
-                              <span>Last login: {formatDate(user.lastLogin)}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {user.lastLogin ? (
+                            <div className="text-xs text-gray-600">
+                              {formatDate(user.lastLogin)}
                             </div>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">Never</span>
                           )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleViewDetails(user._id)}
+                              title="View Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="lg:hidden space-y-4">
+                {filteredUsers.map((user) => (
+                  <div key={user._id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                          <Users className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-2">
+                            <h3 className="font-medium text-gray-900 text-sm truncate">{user.name}</h3>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(user)}`}>
+                              {getUserStatus(user)}
+                            </span>
+                            {user.isEmailVerified && (
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                                Verified
+                              </span>
+                            )}
+                          </div>
+                          <div className="space-y-1 text-xs text-gray-600">
+                            <div className="flex items-center gap-1 truncate">
+                              <Mail className="h-3 w-3 flex-shrink-0" />
+                              <span className="truncate">{user.email}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Phone className="h-3 w-3 flex-shrink-0" />
+                              <span>{user.phone}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleViewDetails(user._id)}
+                        className="h-8 w-8 p-0 flex-shrink-0"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-gray-500 mb-3 pt-3 border-t">
+                      <div className="flex items-center gap-1">
+                        <QrCode className="h-3 w-3" />
+                        <span><span className="font-medium">QR Codes:</span> {user.qrCodesCount || 0}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Items:</span> {user.stats?.totalItems || 0}
+                      </div>
+                      <div>
+                        <span className="font-medium">Pets:</span> {user.stats?.totalPets || 0}
+                      </div>
+                      <div>
+                        <span className="font-medium">Found Items:</span> {user.stats?.itemsFound || 0}
+                      </div>
+                      <div>
+                        <span className="font-medium">Found Pets:</span> {user.stats?.petsFound || 0}
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2 pt-2 border-t">
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <Calendar className="h-3 w-3" />
+                        <span>Joined: {formatDate(user.createdAt)}</span>
+                      </div>
+                      {user.lastLogin && (
+                        <div className="flex items-center gap-1 text-xs text-gray-500">
+                          <Calendar className="h-3 w-3" />
+                          <span>Last login: {formatDate(user.lastLogin)}</span>
+                        </div>
+                      )}
                       <Select
-                        value={user.status}
+                        value={getUserStatus(user)}
                         onValueChange={(value) => handleStatusChange(user._id, value)}
                       >
-                        <SelectTrigger className="w-32">
+                        <SelectTrigger className="w-full h-8 text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -221,14 +359,11 @@ export function UsersList() {
                           <SelectItem value="suspended">Suspended</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Button size="sm" variant="outline">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -257,6 +392,13 @@ export function UsersList() {
           </Button>
         </div>
       )}
+
+      {/* User Detail Modal */}
+      <UserDetailModal
+        userId={selectedUserId}
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+      />
     </div>
   )
 }

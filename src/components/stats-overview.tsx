@@ -1,7 +1,11 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { QrCode, Users, MousePointer, CheckCircle } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { QrCode, Users, MousePointer, CheckCircle, Link2, RefreshCw } from "lucide-react"
+import adminApiClient, { QRCode } from "@/lib/api"
+import { formatDate } from "@/lib/utils"
 
 interface StatsOverviewProps {
   stats: {
@@ -10,9 +14,152 @@ interface StatsOverviewProps {
     totalScans: number
     activeQRCodes: number
   }
+  onRefresh?: () => void
 }
 
-export function StatsOverview({ stats }: StatsOverviewProps) {
+interface RecentActivity {
+  code: string
+  type: string
+  action: string
+  time: string
+  timestamp: Date
+}
+
+export function StatsOverview({ stats, onRefresh }: StatsOverviewProps) {
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
+  const [loadingActivity, setLoadingActivity] = useState(true)
+
+  useEffect(() => {
+    loadRecentActivity()
+  }, [])
+
+  const loadRecentActivity = async () => {
+    try {
+      setLoadingActivity(true)
+      
+      // Try to get recent activity from the new endpoint
+      try {
+        const response = await adminApiClient.getRecentActivity(10)
+        
+        if (response.success && response.data.activities) {
+          const activities: RecentActivity[] = response.data.activities.map((activity: any) => {
+            const timestamp = new Date(activity.timestamp)
+            const timeAgo = getTimeAgo(timestamp)
+            
+            return {
+              code: activity.code,
+              type: activity.type ? activity.type.charAt(0).toUpperCase() + activity.type.slice(1) : "Unknown",
+              action: activity.action ? activity.action.charAt(0).toUpperCase() + activity.action.slice(1) : "Unknown",
+              time: timeAgo,
+              timestamp: timestamp
+            }
+          })
+          
+          setRecentActivity(activities.slice(0, 5))
+          return
+        }
+      } catch (newEndpointError) {
+        console.log("New endpoint not available, falling back to existing endpoints")
+      }
+      
+      // Fallback: Get recent QR codes and scan history separately
+      const activities: RecentActivity[] = []
+      
+      // Get recent QR codes (recently created or activated)
+      try {
+        const recentQRCodesResponse = await adminApiClient.getAllQRCodes({
+          page: 1,
+          limit: 10
+        })
+
+        if (recentQRCodesResponse.success && recentQRCodesResponse.data.qrCodes) {
+          recentQRCodesResponse.data.qrCodes.slice(0, 5).forEach((qr: QRCode) => {
+            const createdAt = new Date(qr.createdAt)
+            const timeAgo = getTimeAgo(createdAt)
+            
+            activities.push({
+              code: qr.code,
+              type: qr.type.charAt(0).toUpperCase() + qr.type.slice(1),
+              action: qr.isActivated ? "Activated" : "Created",
+              time: timeAgo,
+              timestamp: createdAt
+            })
+          })
+        }
+      } catch (error) {
+        console.error("Failed to load recent QR codes:", error)
+      }
+
+      // Get recent scan history
+      try {
+        const scanHistoryResponse = await adminApiClient.getScanHistory({
+          page: 1,
+          limit: 10
+        })
+
+        if (scanHistoryResponse.success && scanHistoryResponse.data.qrCodes) {
+          scanHistoryResponse.data.qrCodes.slice(0, 5).forEach((qr: any) => {
+            if (qr.lastScanned) {
+              const scannedAt = new Date(qr.lastScanned)
+              const timeAgo = getTimeAgo(scannedAt)
+              
+              activities.push({
+                code: qr.code,
+                type: qr.type ? qr.type.charAt(0).toUpperCase() + qr.type.slice(1) : "Unknown",
+                action: "Scanned",
+                time: timeAgo,
+                timestamp: scannedAt
+              })
+            }
+          })
+        }
+      } catch (error) {
+        console.error("Failed to load scan history:", error)
+      }
+
+      // Sort by timestamp (most recent first) and take top 5
+      activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      setRecentActivity(activities.slice(0, 5))
+    } catch (error) {
+      console.error("Failed to load recent activity:", error)
+      setRecentActivity([])
+    } finally {
+      setLoadingActivity(false)
+    }
+  }
+
+  const getTimeAgo = (date: Date): string => {
+    const now = new Date()
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+    
+    if (diffInSeconds < 60) {
+      return `${diffInSeconds} seconds ago`
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60)
+      return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600)
+      return `${hours} hour${hours !== 1 ? 's' : ''} ago`
+    } else {
+      const days = Math.floor(diffInSeconds / 86400)
+      return `${days} day${days !== 1 ? 's' : ''} ago`
+    }
+  }
+
+  const getActionColor = (action: string) => {
+    switch (action.toLowerCase()) {
+      case "scanned":
+        return "bg-blue-500"
+      case "activated":
+        return "bg-green-500"
+      case "created":
+        return "bg-purple-500"
+      case "found":
+        return "bg-orange-500"
+      default:
+        return "bg-gray-500"
+    }
+  }
   const statCards = [
     {
       title: "Total QR Codes",
@@ -50,9 +197,23 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Dashboard Overview</h2>
-        <p className="text-gray-600">Manage Item, Pet, and Emergency QR codes - users fill details when scanning</p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard Overview</h2>
+          <p className="text-sm sm:text-base text-gray-600">Manage Item, Pet, and Emergency QR codes - users fill details when scanning</p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {onRefresh && (
+            <Button variant="outline" size="sm" onClick={onRefresh} className="w-full sm:w-auto">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh Stats
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={loadRecentActivity} className="w-full sm:w-auto">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh Activity
+            </Button>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -82,6 +243,40 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
         })}
       </div>
 
+      {/* Relationship Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Link2 className="h-5 w-5" />
+            User-QR Code Relationships
+          </CardTitle>
+          <CardDescription>
+            Overview of how users and QR codes are connected
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <div className="text-sm font-medium text-gray-600 mb-1">Total Users</div>
+              <div className="text-2xl font-bold text-blue-900">{stats.totalUsers}</div>
+              <div className="text-xs text-gray-500 mt-1">Registered accounts</div>
+            </div>
+            <div className="p-4 bg-green-50 rounded-lg">
+              <div className="text-sm font-medium text-gray-600 mb-1">Total QR Codes</div>
+              <div className="text-2xl font-bold text-green-900">{stats.totalQRCodes}</div>
+              <div className="text-xs text-gray-500 mt-1">All generated codes</div>
+            </div>
+            <div className="p-4 bg-purple-50 rounded-lg">
+              <div className="text-sm font-medium text-gray-600 mb-1">Average per User</div>
+              <div className="text-2xl font-bold text-purple-900">
+                {stats.totalUsers > 0 ? (stats.totalQRCodes / stats.totalUsers).toFixed(1) : '0'}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">QR codes per user</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
@@ -92,28 +287,33 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {[
-                { code: "ABC123DEF456", type: "Pet", action: "Scanned", time: "2 minutes ago" },
-                { code: "XYZ789GHI012", type: "Item", action: "Activated", time: "5 minutes ago" },
-                { code: "EMG345RED678", type: "Emergency", action: "Activated", time: "8 minutes ago" },
-                { code: "MNO345PQR678", type: "Pet", action: "Found", time: "10 minutes ago" },
-                { code: "STU901VWX234", type: "Item", action: "Scanned", time: "15 minutes ago" },
-              ].map((activity, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {activity.code} ({activity.type})
-                      </p>
-                      <p className="text-xs text-gray-500">{activity.action}</p>
+            {loadingActivity ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+              </div>
+            ) : recentActivity.length === 0 ? (
+              <div className="text-center py-8">
+                <QrCode className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                <p className="text-gray-500">No recent activity</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {recentActivity.map((activity, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-2 h-2 ${getActionColor(activity.action)} rounded-full`}></div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          <span className="font-mono text-xs">{activity.code}</span> ({activity.type})
+                        </p>
+                        <p className="text-xs text-gray-500">{activity.action}</p>
+                      </div>
                     </div>
+                    <span className="text-xs text-gray-500">{activity.time}</span>
                   </div>
-                  <span className="text-xs text-gray-500">{activity.time}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
