@@ -75,7 +75,7 @@ export function QRCodeList() {
     try {
       const response = await adminApiClient.getQRCodeByCode(qr.code)
       if (response.success) {
-        setSelectedQRCode(response.data.qrCode)
+        setSelectedQRCode(response.data)
         setDetailModalOpen(true)
       }
     } catch (error) {
@@ -263,11 +263,11 @@ export function QRCodeList() {
                             <div className="text-gray-900">{qr.contact?.name || 'N/A'}</div>
                             <div className="text-gray-600">{qr.contact?.email || 'N/A'}</div>
                             <div className="text-gray-600">
-                              {qr.contact?.countryCode || ''}{qr.contact?.phone || 'N/A'}
+                              {(qr.contact as any)?.countryCode || ''}{qr.contact?.phone || 'N/A'}
                             </div>
-                            {qr.contact?.backupPhone && (
+                            {(qr.contact as any)?.backupPhone && (
                               <div className="text-gray-500 mt-1">
-                                Backup: {qr.contact.backupCountryCode || ''}{qr.contact.backupPhone}
+                                Backup: {(qr.contact as any)?.backupCountryCode || ''}{(qr.contact as any)?.backupPhone}
                               </div>
                             )}
                           </div>

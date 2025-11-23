@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Users, Search, Filter, Mail, Phone, Calendar, MoreHorizontal, Eye, QrCode } from "lucide-react"
+import { Users, Search, Filter, Mail, Phone, Calendar, Eye, QrCode } from "lucide-react"
 import adminApiClient from "@/lib/api"
 import { formatDate } from "@/lib/utils"
 import { UserDetailModal } from "@/components/user-detail-modal"
@@ -39,11 +39,7 @@ export function UsersList() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
 
-  useEffect(() => {
-    loadUsers()
-  }, [currentPage, statusFilter])
-
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       setLoading(true)
       const response = await adminApiClient.getAllUsers({
@@ -61,7 +57,11 @@ export function UsersList() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentPage, searchTerm])
+
+  useEffect(() => {
+    loadUsers()
+  }, [loadUsers])
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
