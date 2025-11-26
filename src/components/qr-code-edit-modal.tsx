@@ -624,7 +624,7 @@ export function QRCodeEditModal({ qrCode: qrCodeProp, open, onOpenChange, onQRCo
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mt-3">
                     <div className="flex-1">
                       <Label className="text-sm font-medium text-black">
-                        Use backup number if I can't be reached
+                        Use backup number if I can&apos;t be reached
                       </Label>
                       <p className="text-xs text-gray-600 mt-1">
                         {editForm.contact.backupPhone.trim()
