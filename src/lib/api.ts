@@ -29,11 +29,23 @@ interface QRCode {
     serialNumber?: string;
     species?: string;
     breed?: string;
-    age?: number;
+    age?: string | number;
     microchipId?: string;
     value?: number;
     purchaseDate?: string;
     warrantyExpiry?: string;
+    image?: string;
+    // Pet-specific fields
+    emergencyDetails?: string;
+    pedigreeInfo?: string;
+    medicalNotes?: string;
+    vetName?: string;
+    vetPhone?: string;
+    vetCountryCode?: string;
+    emergencyContact?: string;
+    emergencyCountryCode?: string;
+    registrationNumber?: string;
+    breederInfo?: string;
     // Emergency Details fields
     medicalAidProvider?: string;
     medicalAidNumber?: string;
@@ -46,19 +58,31 @@ interface QRCode {
     emergencyContact1Name?: string;
     emergencyContact1Phone?: string;
     emergencyContact1CountryCode?: string;
+    emergencyContact1Relation?: string;
     emergencyContact2Name?: string;
     emergencyContact2Phone?: string;
     emergencyContact2CountryCode?: string;
+    emergencyContact2Relation?: string;
   };
   contact: {
     name: string;
     email: string;
     phone: string;
+    countryCode?: string;
+    backupPhone?: string;
+    backupCountryCode?: string;
     message?: string;
+  };
+  settings?: {
+    instantAlerts?: boolean;
+    locationSharing?: boolean;
+    showContactOnFinderPage?: boolean;
+    useBackupNumber?: boolean;
   };
   status: "active" | "inactive" | "suspended" | "found";
   scanCount: number;
   lastScanned?: string;
+  activationDate?: string;
   createdAt: string;
   updatedAt: string;
   qrImageUrl?: string;
@@ -162,12 +186,13 @@ class AdminApiClient {
   // QR Code management
   async generateQRCode(data: {
     type: 'item' | 'pet' | 'emergency' | 'any';
-    details: any;
-    contact: any;
+    details?: any;
+    contact?: any;
+    supplierId?: string;
   }) {
     return this.request('/api/admin/generate-qr', {
       method: 'POST',
-      body: JSON.stringify({ type: data.type }),
+      body: JSON.stringify({ type: data.type, supplierId: data.supplierId }),
     });
   }
 
@@ -297,18 +322,6 @@ class AdminApiClient {
     return this.request<ApiResponse<any>>('/api/admin/bulk-generate', {
       method: 'POST',
       body: JSON.stringify(data),
-    });
-  }
-
-  async generateQRCode(data: {
-    type: 'item' | 'pet' | 'emergency' | 'any';
-    details: any;
-    contact: any;
-    supplierId?: string;
-  }) {
-    return this.request('/api/admin/generate-qr', {
-      method: 'POST',
-      body: JSON.stringify({ type: data.type, supplierId: data.supplierId }),
     });
   }
 

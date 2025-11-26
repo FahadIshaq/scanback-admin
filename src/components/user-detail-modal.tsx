@@ -49,7 +49,7 @@ const buildFormState = (user?: UserData | null) => ({
   email: user?.email || "",
   phone: user?.phone || "",
   role: user?.role || "user",
-  status: user?.status || (user?.isActive ? "active" : "inactive"),
+  status: user?.isActive ? "active" : "inactive",
   isActive: user?.isActive ?? true,
   isEmailVerified: user?.isEmailVerified ?? false,
   stats: {

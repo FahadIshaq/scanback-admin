@@ -160,7 +160,7 @@ export function QRCodeGenerator() {
     })
   }, [])
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: string, value: string | undefined) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
@@ -597,13 +597,14 @@ Generated on: ${new Date().toLocaleString()}
               <div>
                 <Label htmlFor="supplier">Supplier (Optional)</Label>
                 <Select 
-                  value={formData.supplierId || undefined} 
-                  onValueChange={(value) => handleInputChange("supplierId", value || undefined)}
+                  value={formData.supplierId || "none"} 
+                  onValueChange={(value) => handleInputChange("supplierId", value === "none" ? undefined : value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select supplier (optional)" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="none">No Supplier</SelectItem>
                     {suppliers.map(supplier => (
                       <SelectItem key={supplier._id} value={supplier._id}>
                         {supplier.name}
