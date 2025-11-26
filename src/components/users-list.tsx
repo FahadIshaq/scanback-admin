@@ -397,7 +397,18 @@ export function UsersList() {
       <UserDetailModal
         userId={selectedUserId}
         open={detailModalOpen}
-        onOpenChange={setDetailModalOpen}
+        onOpenChange={(open) => {
+          setDetailModalOpen(open)
+          if (!open) {
+            setSelectedUserId(null)
+          }
+        }}
+        onUserUpdated={loadUsers}
+        onUserDeleted={() => {
+          setDetailModalOpen(false)
+          setSelectedUserId(null)
+          loadUsers()
+        }}
       />
     </div>
   )

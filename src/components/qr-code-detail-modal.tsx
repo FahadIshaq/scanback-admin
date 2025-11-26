@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { QRCode } from "@/lib/api"
 import {
   Dialog,
@@ -9,7 +10,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatDate } from "@/lib/utils"
+import adminApiClient from "@/lib/api"
 import { 
   QrCode, 
   User, 
@@ -36,12 +42,169 @@ interface QRCodeDetailModalProps {
   qrCode: QRCode | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onQRCodeUpdated?: () => void
 }
 
-export function QRCodeDetailModal({ qrCode, open, onOpenChange }: QRCodeDetailModalProps) {
+export function QRCodeDetailModal({ qrCode: qrCodeProp, open, onOpenChange, onQRCodeUpdated }: QRCodeDetailModalProps) {
+  const [editableQr, setEditableQr] = useState<QRCode | null>(qrCodeProp)
+  const [detailsJson, setDetailsJson] = useState("")
+  const [contactJson, setContactJson] = useState("")
+  const [settingsJson, setSettingsJson] = useState("")
+  const [typeValue, setTypeValue] = useState<QRCode["type"]>("item")
+  const [statusValue, setStatusValue] = useState<QRCode["status"]>("active")
+  const [ownerIdInput, setOwnerIdInput] = useState("")
+  const [ownerEmailInput, setOwnerEmailInput] = useState("")
+  const [savingDetails, setSavingDetails] = useState(false)
+  const [savingOwner, setSavingOwner] = useState(false)
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (qrCodeProp) {
+      setEditableQr(qrCodeProp)
+      setDetailsJson(JSON.stringify(qrCodeProp.details || {}, null, 2))
+      setContactJson(JSON.stringify(qrCodeProp.contact || {}, null, 2))
+      setSettingsJson(JSON.stringify((qrCodeProp as any).settings || {}, null, 2))
+      setTypeValue(qrCodeProp.type)
+      setStatusValue(qrCodeProp.status)
+      setOwnerIdInput(
+        typeof qrCodeProp.owner === "object"
+          ? (qrCodeProp.owner as any)?._id || ""
+          : typeof qrCodeProp.owner === "string"
+            ? qrCodeProp.owner
+            : ""
+      )
+      setOwnerEmailInput(
+        typeof qrCodeProp.owner === "object"
+          ? qrCodeProp.owner?.email || ""
+          : ""
+      )
+      setFeedbackMessage(null)
+      setErrorMessage(null)
+    } else {
+      setEditableQr(null)
+    }
+  }, [qrCodeProp])
+
+  const qrCode = editableQr ?? qrCodeProp
   if (!qrCode) return null
 
-  const owner = typeof qrCode.owner === 'object' ? qrCode.owner : null
+  const owner = typeof qrCode.owner === "object" ? qrCode.owner : null
+
+  const refreshQRCode = async () => {
+    try {
+      const response = await adminApiClient.getQRCodeByCode(qrCode.code)
+      if (response.success) {
+        const fresh = response.data.qrCode
+        setEditableQr(fresh)
+        setDetailsJson(JSON.stringify(fresh.details || {}, null, 2))
+        setContactJson(JSON.stringify(fresh.contact || {}, null, 2))
+        setSettingsJson(JSON.stringify((fresh as any).settings || {}, null, 2))
+        setTypeValue(fresh.type)
+        setStatusValue(fresh.status)
+        setOwnerIdInput(
+          typeof fresh.owner === "object"
+            ? (fresh.owner as any)?._id || ""
+            : typeof fresh.owner === "string"
+              ? fresh.owner
+              : ""
+        )
+        setOwnerEmailInput(
+          typeof fresh.owner === "object"
+            ? fresh.owner?.email || ""
+            : ""
+        )
+        onQRCodeUpdated?.()
+      }
+    } catch (error) {
+      console.error("Failed to refresh QR code:", error)
+    }
+  }
+
+  const parseJsonField = (label: string, value: string) => {
+    if (!value.trim()) return undefined
+    try {
+      return JSON.parse(value)
+    } catch (error) {
+      throw new Error(`${label} JSON is invalid`)
+    }
+  }
+
+  const handleSaveQRCode = async () => {
+    try {
+      setSavingDetails(true)
+      setErrorMessage(null)
+      setFeedbackMessage(null)
+
+      const payload: Record<string, any> = {
+        type: typeValue,
+        status: statusValue,
+      }
+
+      const parsedDetails = parseJsonField("Details", detailsJson)
+      const parsedContact = parseJsonField("Contact", contactJson)
+      const parsedSettings = parseJsonField("Settings", settingsJson)
+
+      if (parsedDetails) payload.details = parsedDetails
+      if (parsedContact) payload.contact = parsedContact
+      if (parsedSettings) payload.settings = parsedSettings
+
+      const response = await adminApiClient.updateQRCode(qrCode.code, payload)
+      if (response.success) {
+        setFeedbackMessage("QR code updated successfully")
+        await refreshQRCode()
+      }
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Failed to update QR code")
+    } finally {
+      setSavingDetails(false)
+    }
+  }
+
+  const handleAssignOwner = async () => {
+    if (!ownerIdInput && !ownerEmailInput) {
+      setErrorMessage("Provide an owner ID or email address")
+      return
+    }
+
+    try {
+      setSavingOwner(true)
+      setErrorMessage(null)
+      setFeedbackMessage(null)
+
+      const response = await adminApiClient.updateQRCodeOwner(qrCode.code, {
+        ownerId: ownerIdInput || undefined,
+        ownerEmail: ownerEmailInput || undefined,
+      })
+
+      if (response.success) {
+        setFeedbackMessage("Owner updated successfully")
+        await refreshQRCode()
+      }
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Failed to update QR owner")
+    } finally {
+      setSavingOwner(false)
+    }
+  }
+
+  const handleClearOwner = async () => {
+    try {
+      setSavingOwner(true)
+      setErrorMessage(null)
+      setFeedbackMessage(null)
+
+      const response = await adminApiClient.updateQRCodeOwner(qrCode.code, { clearOwner: true })
+      if (response.success) {
+        setFeedbackMessage("Owner removed successfully")
+        await refreshQRCode()
+      }
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Failed to clear QR owner")
+    } finally {
+      setSavingOwner(false)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -114,8 +277,125 @@ export function QRCodeDetailModal({ qrCode, open, onOpenChange }: QRCodeDetailMo
             </CardContent>
           </Card>
 
+        {/* Admin Controls */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Admin Controls
+            </CardTitle>
+            <CardDescription>Update QR code metadata, details, and ownership</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {feedbackMessage && (
+              <div className="text-sm text-green-600 bg-green-50 border border-green-100 rounded-md p-2">
+                {feedbackMessage}
+              </div>
+            )}
+            {errorMessage && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-md p-2">
+                {errorMessage}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs uppercase text-gray-500">Type</Label>
+                <Select value={typeValue} onValueChange={(value) => setTypeValue(value as QRCode["type"])}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="item">Item</SelectItem>
+                    <SelectItem value="pet">Pet</SelectItem>
+                    <SelectItem value="emergency">Emergency</SelectItem>
+                    <SelectItem value="any">Any</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs uppercase text-gray-500">Status</Label>
+                <Select value={statusValue} onValueChange={(value) => setStatusValue(value as QRCode["status"])}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="suspended">Suspended</SelectItem>
+                    <SelectItem value="found">Found</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs uppercase text-gray-500">Assign Owner (User ID)</Label>
+                <Input
+                  value={ownerIdInput}
+                  onChange={(e) => setOwnerIdInput(e.target.value)}
+                  placeholder="Optional user Mongo ID"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs uppercase text-gray-500">Assign Owner (Email)</Label>
+                <Input
+                  value={ownerEmailInput}
+                  onChange={(e) => setOwnerEmailInput(e.target.value)}
+                  placeholder="user@example.com"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={handleAssignOwner} disabled={savingOwner}>
+                {savingOwner ? "Assigning..." : "Assign Owner"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleClearOwner} disabled={savingOwner}>
+                {savingOwner ? "Clearing..." : "Clear Owner"}
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs uppercase text-gray-500">Details JSON</Label>
+                <textarea
+                  className="mt-1 w-full min-h-[120px] rounded-md border border-gray-200 bg-white p-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  value={detailsJson}
+                  onChange={(e) => setDetailsJson(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="text-xs uppercase text-gray-500">Contact JSON</Label>
+                <textarea
+                  className="mt-1 w-full min-h-[120px] rounded-md border border-gray-200 bg-white p-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  value={contactJson}
+                  onChange={(e) => setContactJson(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="text-xs uppercase text-gray-500">Settings JSON</Label>
+                <textarea
+                  className="mt-1 w-full min-h-[120px] rounded-md border border-gray-200 bg-white p-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  value={settingsJson}
+                  onChange={(e) => setSettingsJson(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={handleSaveQRCode} disabled={savingDetails}>
+                {savingDetails ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
           {/* Owner Information */}
-          {owner && (
+        {owner && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -124,6 +404,12 @@ export function QRCodeDetailModal({ qrCode, open, onOpenChange }: QRCodeDetailMo
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+              {(owner as any)?._id && (
+                <div className="flex items-center gap-2">
+                  <Tag className="h-4 w-4 text-gray-400" />
+                  <span className="font-mono text-xs">ID: {(owner as any)._id}</span>
+                </div>
+              )}
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4 text-gray-400" />
                   <span className="font-medium">{owner.name}</span>

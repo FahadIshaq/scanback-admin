@@ -10,6 +10,7 @@ import { QRCodeList } from "@/components/qr-code-list"
 import { StatsOverview } from "@/components/stats-overview"
 import { UsersList } from "@/components/users-list"
 import { AnalyticsDashboard } from "@/components/analytics-dashboard"
+import { SuppliersList } from "@/components/suppliers-list"
 import adminApiClient from "@/lib/api"
 import { 
   QrCode, 
@@ -19,10 +20,11 @@ import {
   Plus,
   Activity,
   Menu,
-  X
+  X,
+  Package
 } from "lucide-react"
 
-type TabType = "overview" | "generate" | "qrcodes" | "users" | "analytics"
+type TabType = "overview" | "generate" | "qrcodes" | "users" | "analytics" | "suppliers"
 
 export function AdminDashboard() {
   const { admin, logout } = useAuth()
@@ -88,6 +90,7 @@ export function AdminDashboard() {
     { id: "generate", label: "Generate QR", icon: Plus },
     { id: "qrcodes", label: "QR Codes", icon: QrCode },
     { id: "users", label: "Users", icon: Users },
+    { id: "suppliers", label: "Suppliers", icon: Package },
     { id: "analytics", label: "Analytics", icon: Activity },
   ]
 
@@ -179,6 +182,7 @@ export function AdminDashboard() {
           {activeTab === "generate" && <QRCodeGenerator />}
           {activeTab === "qrcodes" && <QRCodeList />}
           {activeTab === "users" && <UsersList />}
+          {activeTab === "suppliers" && <SuppliersList />}
           {activeTab === "analytics" && <AnalyticsDashboard />}
         </main>
       </div>

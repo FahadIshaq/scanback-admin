@@ -5,21 +5,39 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { QrCode, Search, Filter, Download, Eye, MoreHorizontal, User, Trash2 } from "lucide-react"
+import { QrCode, Search, Filter, Download, Eye, MoreHorizontal, User, Trash2, Edit } from "lucide-react"
 import adminApiClient, { QRCode } from "@/lib/api"
 import { formatDate } from "@/lib/utils"
 import { QRCodeDetailModal } from "@/components/qr-code-detail-modal"
+import { QRCodeEditModal } from "@/components/qr-code-edit-modal"
 
 export function QRCodeList() {
   const [qrCodes, setQrCodes] = useState<QRCode[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [selectedQRCode, setSelectedQRCode] = useState<QRCode | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [editingQRCode, setEditingQRCode] = useState<QRCode | null>(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 500) // 500ms delay
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  // Reset to page 1 when search term changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearchTerm])
 
   const loadQRCodes = useCallback(async () => {
     try {
@@ -28,7 +46,8 @@ export function QRCodeList() {
         page: currentPage,
         limit: 10,
         type: typeFilter !== "all" ? typeFilter : undefined,
-        status: statusFilter !== "all" ? statusFilter : undefined
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        search: debouncedSearchTerm.trim() || undefined
       })
       
       if (response.success) {
@@ -40,18 +59,11 @@ export function QRCodeList() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, typeFilter, statusFilter])
+  }, [currentPage, typeFilter, statusFilter, debouncedSearchTerm])
 
   useEffect(() => {
     loadQRCodes()
   }, [loadQRCodes])
-
-  const filteredQRCodes = qrCodes.filter(qr => {
-    const matchesSearch = qr.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         qr.details.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         qr.contact.email.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesSearch
-  })
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -75,11 +87,23 @@ export function QRCodeList() {
     try {
       const response = await adminApiClient.getQRCodeByCode(qr.code)
       if (response.success) {
-        setSelectedQRCode(response.data)
+        setSelectedQRCode(response.data.qrCode)
         setDetailModalOpen(true)
       }
     } catch (error) {
       console.error("Failed to load QR code details:", error)
+    }
+  }
+
+  const handleEditQRCode = async (qr: QRCode) => {
+    try {
+      const response = await adminApiClient.getQRCodeByCode(qr.code)
+      if (response.success) {
+        setEditingQRCode(response.data.qrCode)
+        setEditModalOpen(true)
+      }
+    } catch (error) {
+      console.error("Failed to load QR code for editing:", error)
     }
   }
 
@@ -163,7 +187,7 @@ export function QRCodeList() {
         <CardHeader>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <CardTitle>QR Codes ({filteredQRCodes.length})</CardTitle>
+              <CardTitle>QR Codes ({qrCodes.length})</CardTitle>
               <CardDescription className="text-xs sm:text-sm">
                 All generated Item, Pet, and Emergency QR codes - users fill contact details when scanning
               </CardDescription>
@@ -179,7 +203,7 @@ export function QRCodeList() {
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : filteredQRCodes.length === 0 ? (
+          ) : qrCodes.length === 0 ? (
             <div className="text-center py-12">
               <QrCode className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-500">No QR codes found</p>
@@ -206,7 +230,7 @@ export function QRCodeList() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {filteredQRCodes.map((qr) => (
+                    {qrCodes.map((qr) => (
                       <tr key={qr._id} className="hover:bg-gray-50 transition-colors">
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
@@ -246,7 +270,7 @@ export function QRCodeList() {
                           )}
                         </td>
                         <td className="py-3 px-4">
-                          {typeof qr.owner === 'object' && qr.owner ? (
+                          {typeof qr.owner === 'object' && qr.owner && qr.owner.email !== 'admin@scanback.co.za' ? (
                             <div>
                               <div className="text-sm font-medium text-gray-900">{qr.owner.name}</div>
                               <div className="text-xs text-gray-500">{qr.owner.email}</div>
@@ -255,7 +279,7 @@ export function QRCodeList() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-xs text-gray-400 italic">No owner</span>
+                            <span className="text-xs text-gray-400 italic">Unassigned</span>
                           )}
                         </td>
                         <td className="py-3 px-4">
@@ -334,6 +358,14 @@ export function QRCodeList() {
                             <Button 
                               size="sm" 
                               variant="outline"
+                              onClick={() => handleEditQRCode(qr)}
+                              title="Edit"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
                               onClick={() => handleDeleteQRCode(qr.code)}
                               className="text-red-600 hover:text-red-700"
                               title="Delete"
@@ -350,7 +382,7 @@ export function QRCodeList() {
 
               {/* Mobile Card View */}
               <div className="lg:hidden space-y-4">
-                {filteredQRCodes.map((qr) => (
+                {qrCodes.map((qr) => (
                   <div key={qr._id} className="border rounded-lg p-4 space-y-3 hover:bg-gray-50 transition-colors">
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-3 flex-1">
@@ -383,6 +415,14 @@ export function QRCodeList() {
                         <Button 
                           size="sm" 
                           variant="outline"
+                          onClick={() => handleEditQRCode(qr)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
                           onClick={() => handleDeleteQRCode(qr.code)}
                           className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
                         >
@@ -399,7 +439,9 @@ export function QRCodeList() {
                       <div>
                         <span className="text-gray-500">Owner:</span>
                         <div className="text-gray-900 font-medium mt-0.5">
-                          {typeof qr.owner === 'object' && qr.owner ? qr.owner.name : 'No owner'}
+                          {typeof qr.owner === 'object' && qr.owner && qr.owner.email !== 'admin@scanback.co.za' 
+                            ? qr.owner.name 
+                            : 'Unassigned'}
                         </div>
                       </div>
                       <div>
@@ -476,7 +518,26 @@ export function QRCodeList() {
       <QRCodeDetailModal
         qrCode={selectedQRCode}
         open={detailModalOpen}
-        onOpenChange={setDetailModalOpen}
+        onOpenChange={(open) => {
+          setDetailModalOpen(open)
+          if (!open) {
+            setSelectedQRCode(null)
+          }
+        }}
+        onQRCodeUpdated={loadQRCodes}
+      />
+
+      {/* QR Code Edit Modal */}
+      <QRCodeEditModal
+        qrCode={editingQRCode}
+        open={editModalOpen}
+        onOpenChange={(open) => {
+          setEditModalOpen(open)
+          if (!open) {
+            setEditingQRCode(null)
+          }
+        }}
+        onQRCodeUpdated={loadQRCodes}
       />
     </div>
   )

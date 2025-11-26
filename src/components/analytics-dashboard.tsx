@@ -457,13 +457,13 @@ export function AnalyticsDashboard() {
                               <span className="font-medium">{qr.details?.name || 'N/A'}</span>
                             </td>
                             <td className="py-3 px-4">
-                              {qr.owner ? (
+                              {qr.owner && qr.owner.email !== 'admin@scanback.co.za' ? (
                                 <div>
                                   <div className="text-sm font-medium">{qr.owner.name}</div>
                                   <div className="text-xs text-gray-500">{qr.owner.email}</div>
                                 </div>
                               ) : (
-                                <span className="text-gray-400 text-sm">No owner</span>
+                                <span className="text-gray-400 text-sm">Unassigned</span>
                               )}
                             </td>
                             <td className="py-3 px-4 text-center">
@@ -527,10 +527,16 @@ export function AnalyticsDashboard() {
                             <span className="text-gray-500">Scans:</span>
                             <span className="ml-1 font-bold text-purple-600">{qr.scanCount.toLocaleString()}</span>
                           </div>
-                          {qr.owner && (
+                          {qr.owner && qr.owner.email !== 'admin@scanback.co.za' && (
                             <div className="col-span-2">
                               <span className="text-gray-500">Owner:</span>
                               <span className="ml-1 font-medium">{qr.owner.name}</span>
+                            </div>
+                          )}
+                          {(!qr.owner || (qr.owner && qr.owner.email === 'admin@scanback.co.za')) && (
+                            <div className="col-span-2">
+                              <span className="text-gray-500">Owner:</span>
+                              <span className="ml-1 text-gray-400 italic">Unassigned</span>
                             </div>
                           )}
                           {qr.lastScanned && (

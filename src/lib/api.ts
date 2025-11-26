@@ -11,7 +11,7 @@ interface ApiResponse<T> {
 interface QRCode {
   _id: string;
   code: string;
-  type: 'item' | 'pet' | 'emergency';
+  type: 'item' | 'pet' | 'emergency' | 'any';
   isActivated: boolean;
   owner?: {
     _id: string;
@@ -171,12 +171,13 @@ class AdminApiClient {
     });
   }
 
-  async getAllQRCodes(params?: { page?: number; limit?: number; type?: string; status?: string }): Promise<ApiResponse<QRCodeListResponse>> {
+  async getAllQRCodes(params?: { page?: number; limit?: number; type?: string; status?: string; search?: string }): Promise<ApiResponse<QRCodeListResponse>> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
     if (params?.type) queryParams.append('type', params.type);
     if (params?.status) queryParams.append('status', params.status);
+    if (params?.search) queryParams.append('search', params.search);
 
     const queryString = queryParams.toString();
     return this.request<ApiResponse<QRCodeListResponse>>(`/api/admin/qr-codes${queryString ? `?${queryString}` : ''}`);
@@ -199,8 +200,22 @@ class AdminApiClient {
     });
   }
 
-  async getQRCodeByCode(code: string): Promise<ApiResponse<QRCode>> {
-    return this.request<ApiResponse<QRCode>>(`/api/admin/qr-codes/${code}`);
+  async updateQRCode(code: string, data: any): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/admin/qr-codes/${code}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateQRCodeOwner(code: string, data: { ownerId?: string; ownerEmail?: string; clearOwner?: boolean }): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/admin/qr-codes/${code}/owner`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getQRCodeByCode(code: string): Promise<ApiResponse<{ qrCode: QRCode }>> {
+    return this.request<ApiResponse<{ qrCode: QRCode }>>(`/api/admin/qr-codes/${code}`);
   }
 
   // User management
@@ -230,6 +245,20 @@ class AdminApiClient {
     return this.request<ApiResponse<any>>(`/api/admin/users/${userId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
+    });
+  }
+
+  async updateUser(userId: string, data: any): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/admin/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteUser(userId: string, options?: { deleteQRCodes?: boolean; reassignQrToUserId?: string; reassignQrToEmail?: string }): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/admin/users/${userId}`, {
+      method: 'DELETE',
+      body: JSON.stringify(options || {}),
     });
   }
 
@@ -264,11 +293,60 @@ class AdminApiClient {
   }
 
   // Bulk operations
-  async bulkGenerateQRCodes(data: { count: number; type: 'item' | 'pet' | 'emergency'; template: any }): Promise<ApiResponse<any>> {
+  async bulkGenerateQRCodes(data: { count: number; type: 'item' | 'pet' | 'emergency'; template: any; supplierId?: string }): Promise<ApiResponse<any>> {
     return this.request<ApiResponse<any>>('/api/admin/bulk-generate', {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  async generateQRCode(data: {
+    type: 'item' | 'pet' | 'emergency' | 'any';
+    details: any;
+    contact: any;
+    supplierId?: string;
+  }) {
+    return this.request('/api/admin/generate-qr', {
+      method: 'POST',
+      body: JSON.stringify({ type: data.type, supplierId: data.supplierId }),
+    });
+  }
+
+  // Supplier management
+  async getAllSuppliers(): Promise<ApiResponse<{ suppliers: any[] }>> {
+    return this.request<ApiResponse<{ suppliers: any[] }>>('/api/supplier');
+  }
+
+  async getSupplierById(supplierId: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/supplier/${supplierId}`);
+  }
+
+  async createSupplier(data: { name: string; contactName?: string; email?: string; phone?: string; address?: string }): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>('/api/supplier', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSupplier(supplierId: string, data: any): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/supplier/${supplierId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSupplier(supplierId: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/supplier/${supplierId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getSupplierStockBalance(supplierId: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/supplier/${supplierId}/stock-balance`);
+  }
+
+  async getAllSuppliersStockBalance(): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>('/api/supplier/stock-balance');
   }
 
   async exportQRCodes(format: 'csv' | 'excel' = 'csv'): Promise<ApiResponse<any>> {

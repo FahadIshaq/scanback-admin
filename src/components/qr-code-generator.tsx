@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -48,8 +48,10 @@ const hexToRgb = (hexColor: string) => {
 
 export function QRCodeGenerator() {
   const [formData, setFormData] = useState({
-    type: "item" as "item" | "pet" | "emergency" | "any"
+    type: "item" as "item" | "pet" | "emergency" | "any",
+    supplierId: undefined as string | undefined
   })
+  const [suppliers, setSuppliers] = useState<Array<{ _id: string; name: string }>>([])
 
   const [generatedQRCodes, setGeneratedQRCodes] = useState<GeneratedQR[]>([])
   const [generationMode, setGenerationMode] = useState<GenerationMode>("connected")
@@ -145,6 +147,19 @@ export function QRCodeGenerator() {
     })
   }
 
+  // Load suppliers on mount
+  useEffect(() => {
+    adminApiClient.getAllSuppliers().then(response => {
+      if (response.success && response.data.suppliers) {
+        // Filter to only show active suppliers
+        const activeSuppliers = response.data.suppliers.filter((s: any) => s.isActive !== false)
+        setSuppliers(activeSuppliers)
+      }
+    }).catch(err => {
+      console.error("Failed to load suppliers:", err)
+    })
+  }, [])
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
@@ -163,7 +178,10 @@ export function QRCodeGenerator() {
         }
 
       if (generationMode === "connected") {
-      const response = await adminApiClient.generateQRCode(qrData) as any
+      const response = await adminApiClient.generateQRCode({
+        ...qrData,
+        supplierId: formData.supplierId || undefined
+      }) as any
       
       if (response.success) {
           setGeneratedQRCodes([{
@@ -178,7 +196,10 @@ export function QRCodeGenerator() {
 
         const created: GeneratedQR[] = []
         for (let i = 0; i < desiredUniqueCount; i += 1) {
-          const response = await adminApiClient.generateQRCode(qrData) as any
+          const response = await adminApiClient.generateQRCode({
+            ...qrData,
+            supplierId: formData.supplierId || undefined
+          }) as any
           if (response.success) {
             created.push({
           code: response.data.qrCode.code,
@@ -570,6 +591,27 @@ Generated on: ${new Date().toLocaleString()}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-gray-500">Four types are available: Item, Pet, Emergency, and Any Type</p>
+              </div>
+
+              {/* Supplier Selection */}
+              <div>
+                <Label htmlFor="supplier">Supplier (Optional)</Label>
+                <Select 
+                  value={formData.supplierId || undefined} 
+                  onValueChange={(value) => handleInputChange("supplierId", value || undefined)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select supplier (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {suppliers.map(supplier => (
+                      <SelectItem key={supplier._id} value={supplier._id}>
+                        {supplier.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">Assign this stock to a supplier for tracking</p>
               </div>
 
               <div className="space-y-2">
