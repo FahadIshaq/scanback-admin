@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import adminApiClient from "@/lib/api"
 import { formatDate } from "@/lib/utils"
+import { getTypeConfig, getTypeLabel } from "@/lib/qr-type-utils"
 
 interface AnalyticsData {
   qrCodeStats: Array<{
@@ -309,13 +310,9 @@ export function AnalyticsDashboard() {
                     {analytics.breakdown.byType.map((type, index) => {
                       const total = analytics.overview?.qrCodes?.total || 1
                       const percentage = (type.count / total) * 100
-                      const typeColors: Record<string, { bg: string; text: string; icon: any }> = {
-                        item: { bg: 'bg-green-100', text: 'text-green-700', icon: Package },
-                        pet: { bg: 'bg-orange-100', text: 'text-orange-700', icon: Heart },
-                        emergency: { bg: 'bg-red-100', text: 'text-red-700', icon: AlertCircle },
-                      }
-                      const colors = typeColors[type._id] || { bg: 'bg-gray-100', text: 'text-gray-700', icon: QrCode }
-                      const Icon = colors.icon
+                      const config = getTypeConfig(type._id)
+                      const Icon = config.icon
+                      const colors = { bg: config.bgColor, text: config.iconColor }
 
                       return (
                         <div key={index} className="space-y-2">
@@ -325,7 +322,7 @@ export function AnalyticsDashboard() {
                                 <Icon className={`h-4 w-4 ${colors.text}`} />
                               </div>
                               <div>
-                                <span className="font-medium capitalize">{type._id}</span>
+                                <span className="font-medium">{getTypeLabel(type._id)}</span>
                                 <p className="text-xs text-gray-500">
                                   {type.activated} activated • {type.totalScans} scans
                                 </p>
@@ -521,7 +518,7 @@ export function AnalyticsDashboard() {
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div>
                             <span className="text-gray-500">Type:</span>
-                            <span className="ml-1 capitalize font-medium">{qr.type}</span>
+                            <span className="ml-1 font-medium">{getTypeLabel(qr.type)}</span>
                           </div>
                           <div>
                             <span className="text-gray-500">Scans:</span>

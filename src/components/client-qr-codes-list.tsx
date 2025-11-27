@@ -10,13 +10,14 @@ import adminApiClient, { QRCode } from "@/lib/api"
 import { formatDate } from "@/lib/utils"
 import { QRCodeEditModal } from "@/components/qr-code-edit-modal"
 import { QRCodeDetailModal } from "@/components/qr-code-detail-modal"
+import { getTypeConfig, getTypeLabel } from "@/lib/qr-type-utils"
 
-interface SupplierQRCodesListProps {
+interface ClientQRCodesListProps {
   qrCodes: QRCode[]
   onQRCodeUpdated?: () => void
 }
 
-export function SupplierQRCodesList({ qrCodes, onQRCodeUpdated }: SupplierQRCodesListProps) {
+export function ClientQRCodesList({ qrCodes, onQRCodeUpdated }: ClientQRCodesListProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<string>("all")
@@ -81,11 +82,9 @@ export function SupplierQRCodesList({ qrCodes, onQRCodeUpdated }: SupplierQRCode
   }
 
   const getTypeIcon = (type: string) => {
-    switch (type) {
-      case "pet": return "🐕"
-      case "emergency": return "🚨"
-      default: return "📱"
-    }
+    const config = getTypeConfig(type)
+    const Icon = config.icon
+    return <Icon className={`h-5 w-5 ${config.iconColor}`} />
   }
 
   return (
@@ -110,6 +109,7 @@ export function SupplierQRCodesList({ qrCodes, onQRCodeUpdated }: SupplierQRCode
             <SelectItem value="item">Items</SelectItem>
             <SelectItem value="pet">Pets</SelectItem>
             <SelectItem value="emergency">Emergency</SelectItem>
+            <SelectItem value="general">General</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -146,7 +146,7 @@ export function SupplierQRCodesList({ qrCodes, onQRCodeUpdated }: SupplierQRCode
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-xl">{getTypeIcon(qr.type)}</span>
                         <h3 className="font-semibold text-lg">{qr.details?.name || 'N/A'}</h3>
-                        <span className="text-xs font-medium capitalize text-gray-600">{qr.type}</span>
+                        <span className="text-xs font-medium text-gray-600">{getTypeLabel(qr.type)}</span>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(qr.status)}`}>
                           {qr.status}
                         </span>

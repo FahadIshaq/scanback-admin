@@ -10,7 +10,8 @@ import { QRCodeList } from "@/components/qr-code-list"
 import { StatsOverview } from "@/components/stats-overview"
 import { UsersList } from "@/components/users-list"
 import { AnalyticsDashboard } from "@/components/analytics-dashboard"
-import { SuppliersList } from "@/components/suppliers-list"
+import { ClientsList } from "@/components/clients-list"
+import { EmailComposer } from "@/components/email-composer"
 import adminApiClient from "@/lib/api"
 import { 
   QrCode, 
@@ -21,10 +22,11 @@ import {
   Activity,
   Menu,
   X,
-  Package
+  Package,
+  Mail
 } from "lucide-react"
 
-type TabType = "overview" | "generate" | "qrcodes" | "users" | "analytics" | "suppliers"
+type TabType = "overview" | "generate" | "qrcodes" | "users" | "analytics" | "clients" | "email"
 
 export function AdminDashboard() {
   const { admin, logout } = useAuth()
@@ -90,8 +92,9 @@ export function AdminDashboard() {
     { id: "generate", label: "Generate QR", icon: Plus },
     { id: "qrcodes", label: "QR Codes", icon: QrCode },
     { id: "users", label: "Users", icon: Users },
-    { id: "suppliers", label: "Suppliers", icon: Package },
+    { id: "clients", label: "Clients", icon: Package },
     { id: "analytics", label: "Analytics", icon: Activity },
+    { id: "email", label: "Send Email", icon: Mail },
   ]
 
   return (
@@ -178,12 +181,19 @@ export function AdminDashboard() {
 
         {/* Main Content */}
         <main className="flex-1 p-4 sm:p-6 w-full lg:w-auto">
-          {activeTab === "overview" && <StatsOverview stats={stats} onRefresh={loadStats} />}
+          {activeTab === "overview" && (
+            <StatsOverview 
+              stats={stats} 
+              onRefresh={loadStats} 
+              onNavigate={(tab) => setActiveTab(tab as TabType)} 
+            />
+          )}
           {activeTab === "generate" && <QRCodeGenerator />}
           {activeTab === "qrcodes" && <QRCodeList />}
           {activeTab === "users" && <UsersList />}
-          {activeTab === "suppliers" && <SuppliersList />}
+          {activeTab === "clients" && <ClientsList />}
           {activeTab === "analytics" && <AnalyticsDashboard />}
+          {activeTab === "email" && <EmailComposer />}
         </main>
       </div>
     </div>

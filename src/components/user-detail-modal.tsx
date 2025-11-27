@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatDate } from "@/lib/utils"
 import { User, Mail, Phone, Calendar, QrCode, Eye, Trash2 } from "lucide-react"
 import adminApiClient, { QRCode } from "@/lib/api"
+import { getTypeLabel } from "@/lib/qr-type-utils"
 
 interface UserDetailModalProps {
   userId: string | null
@@ -548,8 +549,8 @@ export function UserDetailModal({ userId, open, onOpenChange, onUserUpdated, onU
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <h4 className="font-medium">{qr.details.name}</h4>
-                              <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium capitalize">
-                                {qr.type}
+                              <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
+                                {getTypeLabel(qr.type)}
                               </span>
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                 qr.status === 'active' ? 'bg-green-100 text-green-800' :

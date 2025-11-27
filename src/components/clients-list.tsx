@@ -7,10 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Search, Edit, Trash2, Package, Eye } from "lucide-react"
 import adminApiClient from "@/lib/api"
-import { SupplierModal } from "@/components/supplier-modal"
-import { SupplierStockModal } from "@/components/supplier-stock-modal"
+import { ClientModal } from "@/components/client-modal"
+import { ClientStockModal } from "@/components/client-stock-modal"
 
-interface Supplier {
+interface Client {
   _id: string
   name: string
   contactName?: string
@@ -21,63 +21,63 @@ interface Supplier {
   createdAt: string
 }
 
-export function SuppliersList() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+export function ClientsList() {
+  const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [stockModalOpen, setStockModalOpen] = useState(false)
-  const [viewingStockFor, setViewingStockFor] = useState<Supplier | null>(null)
+  const [viewingStockFor, setViewingStockFor] = useState<Client | null>(null)
 
-  const loadSuppliers = useCallback(async () => {
+  const loadClients = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await adminApiClient.getAllSuppliers()
+      const response = await adminApiClient.getAllClients()
       if (response.success) {
-        setSuppliers(response.data.suppliers)
+        setClients(response.data.clients)
       }
     } catch (error) {
-      console.error("Failed to load suppliers:", error)
+      console.error("Failed to load clients:", error)
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    loadSuppliers()
-  }, [loadSuppliers])
+    loadClients()
+  }, [loadClients])
 
-  const filteredSuppliers = suppliers.filter(supplier =>
-    supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    supplier.contactName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    supplier.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredClients = clients.filter(client =>
+    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.contactName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.email?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const handleEdit = (supplier: Supplier) => {
-    setSelectedSupplier(supplier)
+  const handleEdit = (client: Client) => {
+    setSelectedClient(client)
     setModalOpen(true)
   }
 
-  const handleDelete = async (supplierId: string) => {
-    if (!confirm(`Are you sure you want to delete this supplier?`)) return
+  const handleDelete = async (clientId: string) => {
+    if (!confirm(`Are you sure you want to delete this client?`)) return
     
     try {
-      await adminApiClient.deleteSupplier(supplierId)
-      loadSuppliers()
+      await adminApiClient.deleteClient(clientId)
+      loadClients()
     } catch (error) {
-      console.error("Failed to delete supplier:", error)
-      alert("Failed to delete supplier")
+      console.error("Failed to delete client:", error)
+      alert("Failed to delete client")
     }
   }
 
-  const handleViewStock = (supplier: Supplier) => {
-    setViewingStockFor(supplier)
+  const handleViewStock = (client: Client) => {
+    setViewingStockFor(client)
     setStockModalOpen(true)
   }
 
   const handleCreateNew = () => {
-    setSelectedSupplier(null)
+    setSelectedClient(null)
     setModalOpen(true)
   }
 
@@ -85,12 +85,12 @@ export function SuppliersList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Suppliers Management</h2>
-          <p className="text-gray-600">Manage suppliers and track stock allocations</p>
+          <h2 className="text-2xl font-bold text-gray-900">Clients Management</h2>
+          <p className="text-gray-600">Manage clients and track stock allocations</p>
         </div>
         <Button onClick={handleCreateNew}>
           <Plus className="h-4 w-4 mr-2" />
-          Add Supplier
+          Add Client
         </Button>
       </div>
 
@@ -100,7 +100,7 @@ export function SuppliersList() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="Search suppliers..."
+              placeholder="Search clients..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -109,31 +109,31 @@ export function SuppliersList() {
         </CardContent>
       </Card>
 
-      {/* Suppliers List */}
+      {/* Clients List */}
       <Card>
         <CardHeader>
-          <CardTitle>Suppliers ({filteredSuppliers.length})</CardTitle>
-          <CardDescription>All registered suppliers in the system</CardDescription>
+          <CardTitle>Clients ({filteredClients.length})</CardTitle>
+          <CardDescription>All registered clients in the system</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : filteredSuppliers.length === 0 ? (
+          ) : filteredClients.length === 0 ? (
             <div className="text-center py-12">
               <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">No suppliers found</p>
+              <p className="text-gray-500">No clients found</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredSuppliers.map((supplier) => (
-                <div key={supplier._id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+              {filteredClients.map((client) => (
+                <div key={client._id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-lg">{supplier.name}</h3>
-                        {supplier.isActive ? (
+                        <h3 className="font-semibold text-lg">{client.name}</h3>
+                        {client.isActive ? (
                           <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
                             Active
                           </span>
@@ -144,24 +144,24 @@ export function SuppliersList() {
                         )}
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
-                        {supplier.contactName && (
+                        {client.contactName && (
                           <div>
-                            <span className="font-medium">Contact:</span> {supplier.contactName}
+                            <span className="font-medium">Contact:</span> {client.contactName}
                           </div>
                         )}
-                        {supplier.email && (
+                        {client.email && (
                           <div>
-                            <span className="font-medium">Email:</span> {supplier.email}
+                            <span className="font-medium">Email:</span> {client.email}
                           </div>
                         )}
-                        {supplier.phone && (
+                        {client.phone && (
                           <div>
-                            <span className="font-medium">Phone:</span> {supplier.phone}
+                            <span className="font-medium">Phone:</span> {client.phone}
                           </div>
                         )}
-                        {supplier.address && (
+                        {client.address && (
                           <div>
-                            <span className="font-medium">Address:</span> {supplier.address}
+                            <span className="font-medium">Address:</span> {client.address}
                           </div>
                         )}
                       </div>
@@ -170,7 +170,7 @@ export function SuppliersList() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleViewStock(supplier)}
+                        onClick={() => handleViewStock(client)}
                         title="View Stock Balance"
                       >
                         <Eye className="h-4 w-4" />
@@ -178,7 +178,7 @@ export function SuppliersList() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleEdit(supplier)}
+                        onClick={() => handleEdit(client)}
                         title="Edit"
                       >
                         <Edit className="h-4 w-4" />
@@ -186,7 +186,7 @@ export function SuppliersList() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleDelete(supplier._id)}
+                        onClick={() => handleDelete(client._id)}
                         className="text-red-600 hover:text-red-700"
                         title="Delete"
                       >
@@ -201,22 +201,22 @@ export function SuppliersList() {
         </CardContent>
       </Card>
 
-      {/* Supplier Modal */}
-      <SupplierModal
-        supplier={selectedSupplier}
+      {/* Client Modal */}
+      <ClientModal
+        client={selectedClient}
         open={modalOpen}
         onOpenChange={(open) => {
           setModalOpen(open)
           if (!open) {
-            setSelectedSupplier(null)
+            setSelectedClient(null)
           }
         }}
-        onSupplierUpdated={loadSuppliers}
+        onClientUpdated={loadClients}
       />
 
       {/* Stock Balance Modal */}
-      <SupplierStockModal
-        supplier={viewingStockFor}
+      <ClientStockModal
+        client={viewingStockFor}
         open={stockModalOpen}
         onOpenChange={(open) => {
           setStockModalOpen(open)

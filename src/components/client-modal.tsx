@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import adminApiClient from "@/lib/api"
 import { Save, Loader2 } from "lucide-react"
 
-interface Supplier {
+interface Client {
   _id: string
   name: string
   contactName?: string
@@ -25,14 +25,14 @@ interface Supplier {
   isActive: boolean
 }
 
-interface SupplierModalProps {
-  supplier: Supplier | null
+interface ClientModalProps {
+  client: Client | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSupplierUpdated?: () => void
+  onClientUpdated?: () => void
 }
 
-export function SupplierModal({ supplier, open, onOpenChange, onSupplierUpdated }: SupplierModalProps) {
+export function ClientModal({ client, open, onOpenChange, onClientUpdated }: ClientModalProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -47,14 +47,14 @@ export function SupplierModal({ supplier, open, onOpenChange, onSupplierUpdated 
   })
 
   useEffect(() => {
-    if (supplier) {
+    if (client) {
       setFormData({
-        name: supplier.name || "",
-        contactName: supplier.contactName || "",
-        email: supplier.email || "",
-        phone: supplier.phone || "",
-        address: supplier.address || "",
-        isActive: supplier.isActive ?? true,
+        name: client.name || "",
+        contactName: client.contactName || "",
+        email: client.email || "",
+        phone: client.phone || "",
+        address: client.address || "",
+        isActive: client.isActive ?? true,
       })
     } else {
       setFormData({
@@ -68,7 +68,7 @@ export function SupplierModal({ supplier, open, onOpenChange, onSupplierUpdated 
     }
     setError(null)
     setSuccess(null)
-  }, [supplier])
+  }, [client])
 
   const handleSave = async () => {
     try {
@@ -77,37 +77,37 @@ export function SupplierModal({ supplier, open, onOpenChange, onSupplierUpdated 
       setSuccess(null)
 
       if (!formData.name.trim()) {
-        setError("Supplier name is required")
+        setError("Client name is required")
         return
       }
 
-      if (supplier) {
-        // Update existing supplier
-        const response = await adminApiClient.updateSupplier(supplier._id, formData)
+      if (client) {
+        // Update existing client
+        const response = await adminApiClient.updateClient(client._id, formData)
         if (response.success) {
-          setSuccess("Supplier updated successfully!")
-          onSupplierUpdated?.()
+          setSuccess("Client updated successfully!")
+          onClientUpdated?.()
           setTimeout(() => {
             onOpenChange(false)
           }, 1500)
         } else {
-          setError(response.message || "Failed to update supplier")
+          setError(response.message || "Failed to update client")
         }
       } else {
-        // Create new supplier
-        const response = await adminApiClient.createSupplier(formData)
+        // Create new client
+        const response = await adminApiClient.createClient(formData)
         if (response.success) {
-          setSuccess("Supplier created successfully!")
-          onSupplierUpdated?.()
+          setSuccess("Client created successfully!")
+          onClientUpdated?.()
           setTimeout(() => {
             onOpenChange(false)
           }, 1500)
         } else {
-          setError(response.message || "Failed to create supplier")
+          setError(response.message || "Failed to create client")
         }
       }
     } catch (err: any) {
-      setError(err.message || "Failed to save supplier")
+      setError(err.message || "Failed to save client")
     } finally {
       setSaving(false)
     }
@@ -118,10 +118,10 @@ export function SupplierModal({ supplier, open, onOpenChange, onSupplierUpdated 
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {supplier ? "Edit Supplier" : "Create New Supplier"}
+            {client ? "Edit Client" : "Create New Client"}
           </DialogTitle>
           <DialogDescription>
-            {supplier ? "Update supplier information" : "Add a new supplier to the system"}
+            {client ? "Update client information" : "Add a new client to the system"}
           </DialogDescription>
         </DialogHeader>
 
@@ -138,12 +138,12 @@ export function SupplierModal({ supplier, open, onOpenChange, onSupplierUpdated 
           )}
 
           <div>
-            <Label htmlFor="name">Supplier Name *</Label>
+            <Label htmlFor="name">Client Name *</Label>
             <Input
               id="name"
               value={formData.name}
               onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              placeholder="Enter supplier name"
+              placeholder="Enter client name"
             />
           </div>
 
@@ -165,7 +165,7 @@ export function SupplierModal({ supplier, open, onOpenChange, onSupplierUpdated 
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="supplier@example.com"
+                placeholder="client@example.com"
               />
             </div>
             <div>
@@ -185,7 +185,7 @@ export function SupplierModal({ supplier, open, onOpenChange, onSupplierUpdated 
               id="address"
               value={formData.address}
               onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-              placeholder="Enter supplier address"
+              placeholder="Enter client address"
             />
           </div>
 
@@ -195,7 +195,7 @@ export function SupplierModal({ supplier, open, onOpenChange, onSupplierUpdated 
               checked={formData.isActive}
               onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: checked as boolean }))}
             />
-            <Label htmlFor="isActive">Active Supplier</Label>
+            <Label htmlFor="isActive">Active Client</Label>
           </div>
 
           <div className="flex justify-end gap-2 pt-4">

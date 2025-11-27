@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { QrCode, Users, MousePointer, CheckCircle, Link2, RefreshCw } from "lucide-react"
+import { QrCode, Users, MousePointer, CheckCircle, Link2, RefreshCw, Package, BarChart3 } from "lucide-react"
 import adminApiClient, { QRCode } from "@/lib/api"
 import { formatDate } from "@/lib/utils"
+
+type DashboardTab = "overview" | "generate" | "qrcodes" | "users" | "analytics" | "clients"
 
 interface StatsOverviewProps {
   stats: {
@@ -15,6 +17,7 @@ interface StatsOverviewProps {
     activeQRCodes: number
   }
   onRefresh?: () => void
+  onNavigate?: (tab: DashboardTab) => void
 }
 
 interface RecentActivity {
@@ -25,7 +28,7 @@ interface RecentActivity {
   timestamp: Date
 }
 
-export function StatsOverview({ stats, onRefresh }: StatsOverviewProps) {
+export function StatsOverview({ stats, onRefresh, onNavigate }: StatsOverviewProps) {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [loadingActivity, setLoadingActivity] = useState(true)
 
@@ -326,35 +329,65 @@ export function StatsOverview({ stats, onRefresh }: StatsOverviewProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <button className="w-full text-left p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
-                <div className="flex items-center space-x-3">
-                  <QrCode className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Generate QR Codes</p>
-                    <p className="text-xs text-gray-500">Create Item, Pet, and Emergency QR codes</p>
-                  </div>
-                </div>
-              </button>
-              
-              <button className="w-full text-left p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
-                <div className="flex items-center space-x-3">
-                  <Users className="h-5 w-5 text-green-600" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Manage Users</p>
-                    <p className="text-xs text-gray-500">View and manage user accounts</p>
-                  </div>
-                </div>
-              </button>
-              
-              <button className="w-full text-left p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
-                <div className="flex items-center space-x-3">
-                  <MousePointer className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">View Analytics</p>
-                    <p className="text-xs text-gray-500">Detailed usage statistics</p>
-                  </div>
-                </div>
-              </button>
+              {[
+                {
+                  title: "Generate QR Codes",
+                  description: "Create Item, Pet, and Emergency QR codes",
+                  icon: QrCode,
+                  bg: "bg-blue-50 hover:bg-blue-100",
+                  iconColor: "text-blue-600",
+                  tab: "generate" as DashboardTab,
+                },
+                {
+                  title: "Manage QR Codes",
+                  description: "Edit, assign, or delete QR codes",
+                  icon: MousePointer,
+                  bg: "bg-purple-50 hover:bg-purple-100",
+                  iconColor: "text-purple-600",
+                  tab: "qrcodes" as DashboardTab,
+                },
+                {
+                  title: "Manage Users",
+                  description: "View and manage user accounts",
+                  icon: Users,
+                  bg: "bg-green-50 hover:bg-green-100",
+                  iconColor: "text-green-600",
+                  tab: "users" as DashboardTab,
+                },
+                {
+                  title: "Manage Clients",
+                  description: "Allocate stock and view client QR codes",
+                  icon: Package,
+                  bg: "bg-amber-50 hover:bg-amber-100",
+                  iconColor: "text-amber-600",
+                  tab: "clients" as DashboardTab,
+                },
+                {
+                  title: "View Analytics",
+                  description: "Detailed usage statistics",
+                  icon: BarChart3,
+                  bg: "bg-blue-50 hover:bg-blue-100",
+                  iconColor: "text-blue-600",
+                  tab: "analytics" as DashboardTab,
+                },
+              ].map((action, index) => {
+                const ActionIcon = action.icon
+                return (
+                  <button
+                    key={index}
+                    onClick={() => onNavigate?.(action.tab)}
+                    className={`w-full text-left p-3 rounded-lg transition-colors ${action.bg}`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <ActionIcon className={`h-5 w-5 ${action.iconColor}`} />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{action.title}</p>
+                        <p className="text-xs text-gray-500">{action.description}</p>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </CardContent>
         </Card>

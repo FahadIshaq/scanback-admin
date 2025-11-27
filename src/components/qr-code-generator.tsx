@@ -7,14 +7,26 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, Copy, Check, FileImage, FileText, File, Palette } from "lucide-react"
+import { Download, Copy, Check, FileImage, FileText, File, Palette, Tag, PawPrint, Layers } from "lucide-react"
 import adminApiClient from "@/lib/api"
 import jsPDF from "jspdf"
+import { MedicalCross } from "@/components/MedicalCross"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 type GeneratedQR = {
   code: string
   qrImageUrl: string
   qrUrl: string
+  metadata?: Record<string, any>
 }
 
 type GenerationMode = "connected" | "unique"
@@ -48,28 +60,31 @@ const hexToRgb = (hexColor: string) => {
 
 export function QRCodeGenerator() {
   const [formData, setFormData] = useState({
-    type: "item" as "item" | "pet" | "emergency" | "any",
-    supplierId: undefined as string | undefined
+    type: "item" as "item" | "pet" | "emergency" | "general",
+    clientId: undefined as string | undefined
   })
-  const [suppliers, setSuppliers] = useState<Array<{ _id: string; name: string }>>([])
+  const [clients, setClients] = useState<Array<{ _id: string; name: string }>>([])
 
   const [generatedQRCodes, setGeneratedQRCodes] = useState<GeneratedQR[]>([])
   const [generationMode, setGenerationMode] = useState<GenerationMode>("connected")
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [exportFormat, setExportFormat] = useState<"png" | "svg" | "pdf" | "txt">("png")
-  const [copiesCount, setCopiesCount] = useState(50)
-  const [uniqueCount, setUniqueCount] = useState(50)
+  const [copiesCount, setCopiesCount] = useState(1)
+  const [uniqueCount, setUniqueCount] = useState(1)
+  const [connectedQuantity, setConnectedQuantity] = useState(1)
   const [lineColor, setLineColor] = useState(DEFAULT_QR_COLOR)
   const [transparentBackground, setTransparentBackground] = useState(true)
   const [isBuildingSheet, setIsBuildingSheet] = useState(false)
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const [pendingGeneration, setPendingGeneration] = useState<{ mode: GenerationMode; count: number } | null>(null)
 
   const primaryQR = generatedQRCodes[0] ?? null
   const hasGeneratedCodes = generatedQRCodes.length > 0
 
   const sanitizeCount = (value: number) => {
     if (Number.isNaN(value)) return 1
-    return Math.min(500, Math.max(1, Math.floor(value)))
+    return Math.max(1, Math.floor(value))
   }
 
   const normalizeColorValue = (value: string) => {
@@ -147,16 +162,16 @@ export function QRCodeGenerator() {
     })
   }
 
-  // Load suppliers on mount
+  // Load clients on mount
   useEffect(() => {
-    adminApiClient.getAllSuppliers().then(response => {
-      if (response.success && response.data.suppliers) {
-        // Filter to only show active suppliers
-        const activeSuppliers = response.data.suppliers.filter((s: any) => s.isActive !== false)
-        setSuppliers(activeSuppliers)
+    adminApiClient.getAllClients().then(response => {
+      if (response.success && response.data.clients) {
+        // Filter to only show active clients
+        const activeClients = response.data.clients.filter((s: any) => s.isActive !== false)
+        setClients(activeClients)
       }
     }).catch(err => {
-      console.error("Failed to load suppliers:", err)
+      console.error("Failed to load clients:", err)
     })
   }, [])
 
@@ -164,67 +179,104 @@ export function QRCodeGenerator() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleGenerate = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const executeGeneration = async () => {
     setLoading(true)
     setGeneratedQRCodes([])
 
-      try {
-        // Admin generates blank QR codes - users fill all details when scanning
-        const qrData = {
-          type: formData.type,
-          details: {},
-          contact: {}
-        }
+    try {
+      // Admin generates blank QR codes - users fill all details when scanning
+      const qrData = {
+        type: formData.type,
+        details: {},
+        contact: {}
+      }
 
       if (generationMode === "connected") {
-      const response = await adminApiClient.generateQRCode({
-        ...qrData,
-        supplierId: formData.supplierId || undefined
-      }) as any
-      
-      if (response.success) {
+        const desiredConnectedCount = sanitizeCount(connectedQuantity)
+        if (desiredConnectedCount !== connectedQuantity) {
+          setConnectedQuantity(desiredConnectedCount)
+        }
+
+        const response = await adminApiClient.generateQRCode({
+          ...qrData,
+          clientId: formData.clientId || undefined,
+          quantity: desiredConnectedCount,
+          mode: 'connected'
+        }) as any
+        
+        if (response.success) {
           setGeneratedQRCodes([{
             code: response.data.qrCode.code,
             qrImageUrl: response.data.qrImageDataURL,
-            qrUrl: response.data.qrUrl
+            qrUrl: response.data.qrUrl,
+            metadata: response.data.qrCode.metadata
           }])
         }
       } else {
         const desiredUniqueCount = sanitizeCount(uniqueCount)
-        setUniqueCount(desiredUniqueCount)
-
-        const created: GeneratedQR[] = []
-        for (let i = 0; i < desiredUniqueCount; i += 1) {
-          const response = await adminApiClient.generateQRCode({
-            ...qrData,
-            supplierId: formData.supplierId || undefined
-          }) as any
-          if (response.success) {
-            created.push({
-          code: response.data.qrCode.code,
-          qrImageUrl: response.data.qrImageDataURL,
-          qrUrl: response.data.qrUrl
-        })
-          }
+        if (desiredUniqueCount !== uniqueCount) {
+          setUniqueCount(desiredUniqueCount)
         }
 
-        if (created.length === 0) {
+        // For unique mode, make a single API call with quantity and mode
+        const response = await adminApiClient.generateQRCode({
+          ...qrData,
+          clientId: formData.clientId || undefined,
+          quantity: desiredUniqueCount,
+          mode: 'unique'
+        }) as any
+
+        if (response.success) {
+          // If the backend returns allQRCodes, use those; otherwise use the single QR code
+          if (response.data.allQRCodes && response.data.allQRCodes.length > 0) {
+            const created = response.data.allQRCodes.map((qr: any) => ({
+              code: qr.qrCode.code,
+              qrImageUrl: qr.qrImageDataURL,
+              qrUrl: qr.qrUrl,
+              metadata: qr.qrCode.metadata
+            }))
+            setGeneratedQRCodes(created)
+          } else {
+            // Fallback: single QR code (shouldn't happen for unique mode with quantity > 1)
+            setGeneratedQRCodes([{
+              code: response.data.qrCode.code,
+              qrImageUrl: response.data.qrImageDataURL,
+              qrUrl: response.data.qrUrl,
+              metadata: response.data.qrCode.metadata
+            }])
+          }
+        } else {
           throw new Error("No QR codes were generated. Please try again.")
         }
-
-        if (created.length < desiredUniqueCount) {
-          alert(`Only ${created.length} of ${desiredUniqueCount} QR codes were created. The available codes are ready for export.`)
-        }
-
-        setGeneratedQRCodes(created)
       }
     } catch (error: unknown) {
       console.error("Failed to generate QR code:", error)
       alert((error as Error).message || "Failed to generate QR code")
     } finally {
       setLoading(false)
+      setPendingGeneration(null)
     }
+  }
+
+  const handleGenerationRequest = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (loading) return
+    const connectedCount = sanitizeCount(connectedQuantity)
+    if (connectedCount !== connectedQuantity) {
+      setConnectedQuantity(connectedCount)
+    }
+    const desiredUniqueCount = sanitizeCount(uniqueCount)
+    if (desiredUniqueCount !== uniqueCount) {
+      setUniqueCount(desiredUniqueCount)
+    }
+    const count = generationMode === "connected" ? connectedCount : desiredUniqueCount
+    setPendingGeneration({ mode: generationMode, count })
+    setConfirmDialogOpen(true)
+  }
+
+  const handleConfirmGeneration = async () => {
+    setConfirmDialogOpen(false)
+    await executeGeneration()
   }
 
   const copyToClipboard = async (text: string) => {
@@ -575,44 +627,72 @@ Generated on: ${new Date().toLocaleString()}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleGenerate} className="space-y-4">
+            <form onSubmit={handleGenerationRequest} className="space-y-4">
               {/* Type Selection */}
               <div className="space-y-2">
                 <Label htmlFor="type">QR Code Type *</Label>
-                <Select value={formData.type} onValueChange={(value: "item" | "pet" | "emergency" | "any") => handleInputChange("type", value)}>
+                <Select value={formData.type} onValueChange={(value: "item" | "pet" | "emergency" | "general") => handleInputChange("type", value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select QR code type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="item">📱 Item</SelectItem>
-                    <SelectItem value="pet">🐕 Pet</SelectItem>
-                    <SelectItem value="emergency">🚨 Emergency</SelectItem>
-                    <SelectItem value="any">🎯 General Type</SelectItem>
+                    <SelectItem value="item">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 rounded-md bg-blue-50">
+                          <Tag className="h-4 w-4 text-blue-600" />
+                        </span>
+                        <span className="text-sm font-medium text-gray-900">Item</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="pet">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 rounded-md bg-yellow-50">
+                          <PawPrint className="h-4 w-4 text-yellow-600" />
+                        </span>
+                        <span className="text-sm font-medium text-gray-900">Pet</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="emergency">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 rounded-md bg-red-50">
+                          <MedicalCross className="text-red-600" size={16} />
+                        </span>
+                        <span className="text-sm font-medium text-gray-900">Emergency</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="general">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 rounded-md bg-purple-50">
+                          <Layers className="h-4 w-4 text-purple-600" />
+                        </span>
+                        <span className="text-sm font-medium text-gray-900">General</span>
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500">Four types are available: Item, Pet, Emergency, and Any Type</p>
+                <p className="text-xs text-gray-500">Four types are available: Item, Pet, Emergency, and General</p>
               </div>
 
-              {/* Supplier Selection */}
+              {/* Client Selection */}
               <div>
-                <Label htmlFor="supplier">Supplier (Optional)</Label>
+                <Label htmlFor="client">Client (Optional)</Label>
                 <Select 
-                  value={formData.supplierId || "none"} 
-                  onValueChange={(value) => handleInputChange("supplierId", value === "none" ? undefined : value)}
+                  value={formData.clientId || "none"} 
+                  onValueChange={(value) => handleInputChange("clientId", value === "none" ? undefined : value)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select supplier (optional)" />
+                    <SelectValue placeholder="Select client (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No Supplier</SelectItem>
-                    {suppliers.map(supplier => (
-                      <SelectItem key={supplier._id} value={supplier._id}>
-                        {supplier.name}
+                    <SelectItem value="none">No Client</SelectItem>
+                    {clients.map(client => (
+                      <SelectItem key={client._id} value={client._id}>
+                        {client.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500 mt-1">Assign this stock to a supplier for tracking</p>
+                <p className="text-xs text-gray-500 mt-1">Assign this stock to a client for tracking</p>
               </div>
 
               <div className="space-y-2">
@@ -640,6 +720,22 @@ Generated on: ${new Date().toLocaleString()}
                 </p>
               </div>
 
+              {generationMode === "connected" && (
+                <div className="space-y-2">
+                  <Label htmlFor="connectedCount">How many connected QR codes?</Label>
+                  <Input
+                    id="connectedCount"
+                    type="number"
+                    min={1}
+                    value={connectedQuantity}
+                    onChange={event => setConnectedQuantity(Number(event.target.value))}
+                  />
+                  <p className="text-xs text-gray-500">
+                    We&apos;ll generate one QR code and track this quantity for inventory purposes.
+                  </p>
+                </div>
+              )}
+
               {generationMode === "unique" && (
                 <div className="space-y-2">
                   <Label htmlFor="uniqueCount">How many unique QR codes?</Label>
@@ -647,11 +743,9 @@ Generated on: ${new Date().toLocaleString()}
                     id="uniqueCount"
                     type="number"
                     min={1}
-                    max={500}
                     value={uniqueCount}
                     onChange={event => setUniqueCount(Number(event.target.value))}
                   />
-                  <p className="text-xs text-gray-500">We recommend batches of up to 200 at a time.</p>
                 </div>
               )}
 
@@ -662,16 +756,16 @@ Generated on: ${new Date().toLocaleString()}
                 <div className="bg-blue-50 p-4 rounded-lg">
                   <h3 className="text-lg font-medium mb-2 text-blue-900">📝 How It Works</h3>
                   <p className="text-sm text-blue-700 mb-2">
-                    <strong>Admin generates blank QR codes for Items, Pets, Emergency contacts, and Any Type.</strong>
+                    <strong>Admin generates blank QR codes for Items, Pets, Emergency contacts, and General.</strong>
                   </p>
                   <p className="text-sm text-blue-700 mb-2">
-                    <strong>Any Type QR codes:</strong> When scanned, users can choose whether it&apos;s an Item, Pet, or Emergency tag.
+                    <strong>General QR codes:</strong> When scanned, users can choose whether it&apos;s an Item, Pet, or Emergency tag.
                   </p>
                   <p className="text-sm text-blue-700">
                     When users scan the QR code, they will:
                   </p>
                   <ul className="text-sm text-blue-700 mt-2 ml-4 list-disc">
-                    <li>{formData.type === 'any' ? 'Choose the tag type (Item, Pet, or Emergency)' : `Fill in their ${formData.type} details (name, description, etc.)`}</li>
+                    <li>{formData.type === 'general' ? 'Choose the tag type (Item, Pet, or Emergency)' : `Fill in their ${formData.type} details (name, description, etc.)`}</li>
                     <li>Add their contact information</li>
                     <li>Activate the QR code</li>
                     <li>Receive confirmation email</li>
@@ -711,6 +805,12 @@ Generated on: ${new Date().toLocaleString()}
                 <p className="text-sm text-green-700 mb-2">
                   <strong>Type:</strong> {formData.type.toUpperCase()} QR Code
                 </p>
+                {generationMode === "connected" && (
+                  <p className="text-sm text-green-700 mb-2">
+                    <strong>Quantity recorded:</strong>{" "}
+                    {primaryQR.metadata?.connectedQuantity ?? sanitizeCount(connectedQuantity)} copies
+                  </p>
+                )}
                 <p className="text-sm text-green-700 mb-2">
                   Users will scan this QR code and fill in all their {formData.type} details and contact information.
                 </p>
@@ -983,6 +1083,34 @@ Generated on: ${new Date().toLocaleString()}
           </Card>
         )}
       </div>
+
+      <AlertDialog
+        open={confirmDialogOpen}
+        
+        onOpenChange={(open) => {
+          setConfirmDialogOpen(open)
+          if (!open && !loading) {
+            setPendingGeneration(null)
+          }
+        }}
+      >
+        <AlertDialogContent className="bg-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Generate QR codes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingGeneration
+                ? `This will generate ${pendingGeneration.count} ${pendingGeneration.mode === "connected" ? "connected" : "unique"} QR code${pendingGeneration.count === 1 ? "" : "s"}. This action can’t be undone.`
+                : "This action can’t be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmGeneration} disabled={loading}>
+              {loading ? "Generating..." : "Yes, generate"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   )

@@ -1,5 +1,5 @@
 // API base URL - backend root URL (paths already include /api/)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://scanback-backend.vercel.app';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://www.scanback-backend.vercel.app';
 
 // TypeScript interfaces
 interface ApiResponse<T> {
@@ -11,7 +11,7 @@ interface ApiResponse<T> {
 interface QRCode {
   _id: string;
   code: string;
-  type: 'item' | 'pet' | 'emergency' | 'any';
+  type: 'item' | 'pet' | 'emergency' | 'general';
   isActivated: boolean;
   owner?: {
     _id: string;
@@ -79,6 +79,7 @@ interface QRCode {
     showContactOnFinderPage?: boolean;
     useBackupNumber?: boolean;
   };
+  metadata?: Record<string, any>;
   status: "active" | "inactive" | "suspended" | "found";
   scanCount: number;
   lastScanned?: string;
@@ -185,14 +186,21 @@ class AdminApiClient {
 
   // QR Code management
   async generateQRCode(data: {
-    type: 'item' | 'pet' | 'emergency' | 'any';
+    type: 'item' | 'pet' | 'emergency' | 'general';
     details?: any;
     contact?: any;
-    supplierId?: string;
+    clientId?: string;
+    quantity?: number;
+    mode?: 'connected' | 'unique';
   }) {
     return this.request('/api/admin/generate-qr', {
       method: 'POST',
-      body: JSON.stringify({ type: data.type, supplierId: data.supplierId }),
+      body: JSON.stringify({ 
+        type: data.type, 
+        clientId: data.clientId, 
+        quantity: data.quantity,
+        mode: data.mode 
+      }),
     });
   }
 
@@ -318,52 +326,133 @@ class AdminApiClient {
   }
 
   // Bulk operations
-  async bulkGenerateQRCodes(data: { count: number; type: 'item' | 'pet' | 'emergency'; template: any; supplierId?: string }): Promise<ApiResponse<any>> {
+  async bulkGenerateQRCodes(data: { count: number; type: 'item' | 'pet' | 'emergency'; template: any; clientId?: string }): Promise<ApiResponse<any>> {
     return this.request<ApiResponse<any>>('/api/admin/bulk-generate', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  // Supplier management
-  async getAllSuppliers(): Promise<ApiResponse<{ suppliers: any[] }>> {
-    return this.request<ApiResponse<{ suppliers: any[] }>>('/api/supplier');
+  // Client management
+  async getAllClients(): Promise<ApiResponse<{ clients: any[] }>> {
+    return this.request<ApiResponse<{ clients: any[] }>>('/api/clients');
   }
 
-  async getSupplierById(supplierId: string): Promise<ApiResponse<any>> {
-    return this.request<ApiResponse<any>>(`/api/supplier/${supplierId}`);
+  async getClientById(clientId: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/clients/${clientId}`);
   }
 
-  async createSupplier(data: { name: string; contactName?: string; email?: string; phone?: string; address?: string }): Promise<ApiResponse<any>> {
-    return this.request<ApiResponse<any>>('/api/supplier', {
+  async createClient(data: { name: string; contactName?: string; email?: string; phone?: string; address?: string }): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>('/api/clients', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSupplier(supplierId: string, data: any): Promise<ApiResponse<any>> {
-    return this.request<ApiResponse<any>>(`/api/supplier/${supplierId}`, {
+  async updateClient(clientId: string, data: any): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/clients/${clientId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteSupplier(supplierId: string): Promise<ApiResponse<any>> {
-    return this.request<ApiResponse<any>>(`/api/supplier/${supplierId}`, {
+  async deleteClient(clientId: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/clients/${clientId}`, {
       method: 'DELETE',
     });
   }
 
-  async getSupplierStockBalance(supplierId: string): Promise<ApiResponse<any>> {
-    return this.request<ApiResponse<any>>(`/api/supplier/${supplierId}/stock-balance`);
+  async getClientStockBalance(clientId: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/clients/${clientId}/stock-balance`);
   }
 
-  async getAllSuppliersStockBalance(): Promise<ApiResponse<any>> {
-    return this.request<ApiResponse<any>>('/api/supplier/stock-balance');
+  async getClientGenerations(clientId: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/api/clients/${clientId}/generations`);
+  }
+
+  async getAllClientsStockBalance(): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>('/api/clients/stock-balance');
   }
 
   async exportQRCodes(format: 'csv' | 'excel' = 'csv'): Promise<ApiResponse<any>> {
     return this.request<ApiResponse<any>>(`/api/admin/export?format=${format}`);
+  }
+
+  async sendBulkEmail(data: {
+    userIds?: string[];
+    clientIds?: string[];
+    customEmails?: string[];
+    subject: string;
+    htmlContent: string;
+    textContent?: string;
+    attachments?: Array<{ filename: string; url: string }>;
+  }): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>('/api/admin/send-email', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async uploadImage(file: File, folder?: string): Promise<{ success: boolean; url?: string; message?: string }> {
+    const formData = new FormData();
+    formData.append('image', file);
+    if (folder) {
+      formData.append('folder', folder);
+    }
+
+    const url = `${this.baseURL}/api/storage/upload`;
+    const config: RequestInit = {
+      method: 'POST',
+      headers: {
+        ...(this.token && { Authorization: `Bearer ${this.token}` }),
+      },
+      body: formData,
+    };
+
+    try {
+      const response = await fetch(url, config);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to upload image');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Image upload failed:', error);
+      throw error;
+    }
+  }
+
+  async uploadFile(file: File, folder?: string): Promise<{ success: boolean; url?: string; filename?: string; message?: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (folder) {
+      formData.append('folder', folder);
+    }
+
+    const url = `${this.baseURL}/api/storage/upload-file`;
+    const config: RequestInit = {
+      method: 'POST',
+      headers: {
+        ...(this.token && { Authorization: `Bearer ${this.token}` }),
+      },
+      body: formData,
+    };
+
+    try {
+      const response = await fetch(url, config);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to upload file');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('File upload failed:', error);
+      throw error;
+    }
   }
 }
 

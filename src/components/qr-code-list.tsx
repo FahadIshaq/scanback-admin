@@ -10,6 +10,7 @@ import adminApiClient, { QRCode } from "@/lib/api"
 import { formatDate } from "@/lib/utils"
 import { QRCodeDetailModal } from "@/components/qr-code-detail-modal"
 import { QRCodeEditModal } from "@/components/qr-code-edit-modal"
+import { getTypeConfig, getTypeLabel } from "@/lib/qr-type-utils"
 
 export function QRCodeList() {
   const [qrCodes, setQrCodes] = useState<QRCode[]>([])
@@ -76,11 +77,9 @@ export function QRCodeList() {
   }
 
   const getTypeIcon = (type: string) => {
-    switch (type) {
-      case "pet": return "🐕"
-      case "emergency": return "🚨"
-      default: return "📱"
-    }
+    const config = getTypeConfig(type)
+    const Icon = config.icon
+    return <Icon className={`h-5 w-5 ${config.iconColor}`} />
   }
 
   const handleViewDetails = async (qr: QRCode) => {
@@ -160,6 +159,7 @@ export function QRCodeList() {
                 <SelectItem value="item">Items</SelectItem>
                 <SelectItem value="pet">Pets</SelectItem>
                 <SelectItem value="emergency">Emergency</SelectItem>
+                <SelectItem value="general">General</SelectItem>
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -235,7 +235,7 @@ export function QRCodeList() {
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
                             <span className="text-xl">{getTypeIcon(qr.type)}</span>
-                            <span className="text-xs font-medium capitalize text-gray-700">{qr.type}</span>
+                            <span className="text-xs font-medium text-gray-700">{getTypeLabel(qr.type)}</span>
                           </div>
                         </td>
                         <td className="py-3 px-4">

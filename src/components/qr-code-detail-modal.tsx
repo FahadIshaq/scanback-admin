@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatDate } from "@/lib/utils"
 import adminApiClient from "@/lib/api"
+import { getTypeConfig, getTypeLabel } from "@/lib/qr-type-utils"
 import { 
   QrCode, 
   User, 
@@ -236,7 +237,7 @@ export function QRCodeDetailModal({ qrCode: qrCodeProp, open, onOpenChange, onQR
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Type</label>
-                  <p className="text-sm mt-1 capitalize font-medium">{qrCode.type}</p>
+                  <p className="text-sm mt-1 font-medium">{getTypeLabel(qrCode.type)}</p>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Status</label>
@@ -309,7 +310,7 @@ export function QRCodeDetailModal({ qrCode: qrCodeProp, open, onOpenChange, onQR
                     <SelectItem value="item">Item</SelectItem>
                     <SelectItem value="pet">Pet</SelectItem>
                     <SelectItem value="emergency">Emergency</SelectItem>
-                    <SelectItem value="any">Any</SelectItem>
+                    <SelectItem value="general">General</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -432,12 +433,14 @@ export function QRCodeDetailModal({ qrCode: qrCodeProp, open, onOpenChange, onQR
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                {qrCode.type === 'item' && <Package className="h-5 w-5" />}
-                {qrCode.type === 'pet' && <Heart className="h-5 w-5" />}
-                {qrCode.type === 'emergency' && <AlertCircle className="h-5 w-5" />}
+                {(() => {
+                  const config = getTypeConfig(qrCode.type)
+                  const Icon = config.icon
+                  return <Icon className={`h-5 w-5 ${config.iconColor}`} />
+                })()}
                 Details Information
               </CardTitle>
-              <CardDescription>All details specific to {qrCode.type} type QR code</CardDescription>
+              <CardDescription>All details specific to {getTypeLabel(qrCode.type)} type QR code</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
