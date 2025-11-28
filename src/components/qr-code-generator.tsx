@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Download, Copy, Check, FileImage, FileText, File, Palette, Tag, PawPrint, Layers } from "lucide-react"
 import adminApiClient from "@/lib/api"
 import jsPDF from "jspdf"
+import JSZip from "jszip"
 import { MedicalCross } from "@/components/MedicalCross"
 import {
   AlertDialog,
@@ -359,6 +360,58 @@ export function QRCodeGenerator() {
 
     setIsBuildingSheet(true)
     try {
+      // If unique mode with multiple codes, create individual PDFs and bundle in ZIP
+      if (generationMode === "unique" && generatedQRCodes.length > 1) {
+        const zip = new JSZip()
+        
+        // Create individual PDFs for each QR code
+        for (let i = 0; i < generatedQRCodes.length; i++) {
+          const code = generatedQRCodes[i]
+          const pdf = new jsPDF({
+            orientation: "portrait",
+            unit: "mm",
+            format: "a4"
+          })
+
+          const pageWidth = pdf.internal.pageSize.getWidth()
+          const pageHeight = pdf.internal.pageSize.getHeight()
+          const margin = 5
+          const codeSizeMm = 20
+
+          // Center the QR code on the page
+          const x = (pageWidth - codeSizeMm) / 2
+          const y = (pageHeight - codeSizeMm) / 2
+
+          // Style and add the QR code image
+          const canvas = await stylizeQRImage(code.qrImageUrl, {
+            lineColor,
+            transparentBackground
+          })
+          const dataUrl = canvas.toDataURL("image/png")
+          
+          pdf.addImage(dataUrl, "PNG", x, y, codeSizeMm, codeSizeMm, undefined, "FAST")
+          
+          // Generate PDF as arraybuffer and convert to blob, then add to ZIP
+          const pdfArrayBuffer = pdf.output("arraybuffer")
+          const pdfBlob = new Blob([pdfArrayBuffer], { type: "application/pdf" })
+          zip.file(`qr-code-${code.code}.pdf`, pdfBlob)
+        }
+
+        // Generate ZIP file and download
+        const zipBlob = await zip.generateAsync({ type: "blob" })
+        const url = URL.createObjectURL(zipBlob)
+        const link = document.createElement("a")
+        link.href = url
+        link.download = `qr-codes-${generatedQRCodes.length}-unique.zip`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        
+        return
+      }
+
+      // Original behavior: grid layout for connected mode or single unique code
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
@@ -1073,7 +1126,11 @@ Generated on: ${new Date().toLocaleString()}
                         disabled={isBuildingSheet || generatedQRCodes.length === 0}
                         className="w-full"
                       >
-                        {isBuildingSheet ? "Building PDF..." : `Download ${generatedQRCodes.length} Unique Codes PDF`}
+                        {isBuildingSheet 
+                          ? "Building PDF..." 
+                          : generatedQRCodes.length > 1
+                            ? `Download ${generatedQRCodes.length} Unique Codes ZIP`
+                            : `Download ${generatedQRCodes.length} Unique Code PDF`}
                       </Button>
                     </div>
                   )}
