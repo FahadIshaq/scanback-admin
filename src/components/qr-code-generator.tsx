@@ -394,7 +394,8 @@ export function QRCodeGenerator() {
           // Generate PDF as arraybuffer and convert to blob, then add to ZIP
           const pdfArrayBuffer = pdf.output("arraybuffer")
           const pdfBlob = new Blob([pdfArrayBuffer], { type: "application/pdf" })
-          zip.file(`qr-code-${code.code}.pdf`, pdfBlob)
+          // Use simple incrementing numbers for PDF filenames: 1.pdf, 2.pdf, 3.pdf, ...
+          zip.file(`${i + 1}.pdf`, pdfBlob)
         }
 
         // Generate ZIP file and download
