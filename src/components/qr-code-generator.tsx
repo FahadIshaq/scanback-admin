@@ -785,7 +785,7 @@ Generated on: ${new Date().toLocaleString()}
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500 mt-1">QR codes will use this company's branding when scanned</p>
+                <p className="text-xs text-gray-500 mt-1">QR codes will use this company&apos;s branding when scanned</p>
               </div>
 
               <div className="space-y-2">
