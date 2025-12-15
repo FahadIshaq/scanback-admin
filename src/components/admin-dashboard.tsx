@@ -12,6 +12,7 @@ import { UsersList } from "@/components/users-list"
 import { AnalyticsDashboard } from "@/components/analytics-dashboard"
 import { ClientsList } from "@/components/clients-list"
 import { EmailComposer } from "@/components/email-composer"
+import { WhiteLabelList } from "@/components/white-label-list"
 import adminApiClient from "@/lib/api"
 import { 
   QrCode, 
@@ -23,10 +24,11 @@ import {
   Menu,
   X,
   Package,
-  Mail
+  Mail,
+  Palette
 } from "lucide-react"
 
-type TabType = "overview" | "generate" | "qrcodes" | "users" | "analytics" | "clients" | "email"
+type TabType = "overview" | "generate" | "qrcodes" | "users" | "analytics" | "clients" | "email" | "whitelabel"
 
 export function AdminDashboard() {
   const { admin, logout } = useAuth()
@@ -93,6 +95,7 @@ export function AdminDashboard() {
     { id: "qrcodes", label: "QR Codes", icon: QrCode },
     { id: "users", label: "Users", icon: Users },
     { id: "clients", label: "Clients", icon: Package },
+    { id: "whitelabel", label: "White Label", icon: Palette },
     { id: "analytics", label: "Analytics", icon: Activity },
     { id: "email", label: "Send Email", icon: Mail },
   ]
@@ -192,6 +195,7 @@ export function AdminDashboard() {
           {activeTab === "qrcodes" && <QRCodeList />}
           {activeTab === "users" && <UsersList />}
           {activeTab === "clients" && <ClientsList />}
+          {activeTab === "whitelabel" && <WhiteLabelList />}
           {activeTab === "analytics" && <AnalyticsDashboard />}
           {activeTab === "email" && <EmailComposer />}
         </main>

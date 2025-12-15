@@ -1,5 +1,5 @@
 // API base URL - backend root URL (paths already include /api/)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://www.scanback-backend.vercel.app';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://scanback-backend.vercel.app';
 
 // TypeScript interfaces
 interface ApiResponse<T> {
@@ -190,14 +190,16 @@ class AdminApiClient {
     details?: any;
     contact?: any;
     clientId?: string;
+    whiteLabelId?: string;
     quantity?: number;
     mode?: 'connected' | 'unique';
   }) {
     return this.request('/api/admin/generate-qr', {
       method: 'POST',
-      body: JSON.stringify({ 
-        type: data.type, 
-        clientId: data.clientId, 
+      body: JSON.stringify({
+        type: data.type,
+        clientId: data.clientId,
+        whiteLabelId: data.whiteLabelId,
         quantity: data.quantity,
         mode: data.mode 
       }),
@@ -453,6 +455,58 @@ class AdminApiClient {
       console.error('File upload failed:', error);
       throw error;
     }
+  }
+
+  // White Label management
+  async getAllWhiteLabels(params?: { page?: number; limit?: number; search?: string }): Promise<ApiResponse<any>> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.search) queryParams.append('search', params.search);
+
+    return this.request(`/api/white-label?${queryParams.toString()}`);
+  }
+
+  async getWhiteLabelById(id: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/white-label/${id}`);
+  }
+
+  async createWhiteLabel(data: {
+    email: string;
+    logo: string;
+    brandName: string;
+    website: string;
+    isActive?: boolean;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/api/white-label', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateWhiteLabel(id: string, data: {
+    email?: string;
+    logo?: string;
+    brandName?: string;
+    website?: string;
+    isActive?: boolean;
+  }): Promise<ApiResponse<any>> {
+    return this.request(`/api/white-label/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteWhiteLabel(id: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/white-label/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async toggleWhiteLabelStatus(id: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/white-label/${id}/toggle`, {
+      method: 'PATCH',
+    });
   }
 }
 

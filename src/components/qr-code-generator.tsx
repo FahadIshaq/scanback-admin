@@ -62,9 +62,11 @@ const hexToRgb = (hexColor: string) => {
 export function QRCodeGenerator() {
   const [formData, setFormData] = useState({
     type: "item" as "item" | "pet" | "emergency" | "general",
-    clientId: undefined as string | undefined
+    clientId: undefined as string | undefined,
+    whiteLabelId: undefined as string | undefined
   })
   const [clients, setClients] = useState<Array<{ _id: string; name: string }>>([])
+  const [whiteLabels, setWhiteLabels] = useState<Array<{ _id: string; email: string; brandName: string }>>([])
 
   const [generatedQRCodes, setGeneratedQRCodes] = useState<GeneratedQR[]>([])
   const [generationMode, setGenerationMode] = useState<GenerationMode>("connected")
@@ -163,7 +165,7 @@ export function QRCodeGenerator() {
     })
   }
 
-  // Load clients on mount
+  // Load clients and white labels on mount
   useEffect(() => {
     adminApiClient.getAllClients().then(response => {
       if (response.success && response.data.clients) {
@@ -173,6 +175,19 @@ export function QRCodeGenerator() {
       }
     }).catch(err => {
       console.error("Failed to load clients:", err)
+    })
+
+    // Load white labels
+    adminApiClient.getAllWhiteLabels().then(response => {
+      if (response.success && response.data) {
+        // Handle both paginated and non-paginated responses
+        const whiteLabelsList = response.data.whiteLabels || response.data.data?.whiteLabels || []
+        // Filter to only show active white labels
+        const activeWhiteLabels = whiteLabelsList.filter((wl: any) => wl.isActive !== false)
+        setWhiteLabels(activeWhiteLabels)
+      }
+    }).catch(err => {
+      console.error("Failed to load white labels:", err)
     })
   }, [])
 
@@ -201,6 +216,7 @@ export function QRCodeGenerator() {
         const response = await adminApiClient.generateQRCode({
           ...qrData,
           clientId: formData.clientId || undefined,
+          whiteLabelId: formData.whiteLabelId || undefined,
           quantity: desiredConnectedCount,
           mode: 'connected'
         }) as any
@@ -223,6 +239,7 @@ export function QRCodeGenerator() {
         const response = await adminApiClient.generateQRCode({
           ...qrData,
           clientId: formData.clientId || undefined,
+          whiteLabelId: formData.whiteLabelId || undefined,
           quantity: desiredUniqueCount,
           mode: 'unique'
         }) as any
@@ -747,6 +764,28 @@ Generated on: ${new Date().toLocaleString()}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-gray-500 mt-1">Assign this stock to a client for tracking</p>
+              </div>
+
+              {/* White Label Selection */}
+              <div>
+                <Label htmlFor="whiteLabel">White Label Company (Optional)</Label>
+                <Select 
+                  value={formData.whiteLabelId || "none"} 
+                  onValueChange={(value) => handleInputChange("whiteLabelId", value === "none" ? undefined : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select white label company (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No White Label</SelectItem>
+                    {whiteLabels.map(wl => (
+                      <SelectItem key={wl._id} value={wl._id}>
+                        {wl.brandName} ({wl.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">QR codes will use this company's branding when scanned</p>
               </div>
 
               <div className="space-y-2">
