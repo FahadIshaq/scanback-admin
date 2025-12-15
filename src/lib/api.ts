@@ -508,6 +508,23 @@ class AdminApiClient {
       method: 'PATCH',
     });
   }
+
+  async createWhiteLabelAdmin(data: {
+    whiteLabelId: string;
+    email: string;
+    password: string;
+    name: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/api/admin/white-label-admin', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getWhiteLabelAdmins(whiteLabelId?: string): Promise<ApiResponse<{ admins: any[] }>> {
+    const query = whiteLabelId ? `?whiteLabelId=${whiteLabelId}` : '';
+    return this.request<ApiResponse<{ admins: any[] }>>(`/api/admin/white-label-admins${query}`);
+  }
 }
 
 export const adminApiClient = new AdminApiClient(API_BASE_URL);
