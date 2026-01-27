@@ -11,6 +11,7 @@ import { Download, Copy, Check, FileImage, FileText, File, Palette, Tag, PawPrin
 import adminApiClient from "@/lib/api"
 import jsPDF from "jspdf"
 import JSZip from "jszip"
+import * as XLSX from "xlsx"
 import { MedicalCross } from "@/components/MedicalCross"
 import {
   AlertDialog,
@@ -63,7 +64,7 @@ export function QRCodeGenerator() {
   const [formData, setFormData] = useState({
     type: "item" as "item" | "pet" | "emergency" | "general",
     clientId: undefined as string | undefined,
-    whiteLabelId: undefined as string | undefined
+    whiteLabelId: undefined as string | undefined,
   })
   const [clients, setClients] = useState<Array<{ _id: string; name: string }>>([])
   const [whiteLabels, setWhiteLabels] = useState<Array<{ _id: string; email: string; brandName: string }>>([])
@@ -73,6 +74,8 @@ export function QRCodeGenerator() {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [exportFormat, setExportFormat] = useState<"png" | "svg" | "pdf" | "txt">("png")
+  const [exportColor, setExportColor] = useState<"silver" | "black" | "golden" | "white">("silver")
+  const [exportSize, setExportSize] = useState<"2x20mm" | "2x25mm" | "2x30mm">("2x20mm")
   const [copiesCount, setCopiesCount] = useState(1)
   const [uniqueCount, setUniqueCount] = useState(1)
   const [connectedQuantity, setConnectedQuantity] = useState(1)
@@ -681,6 +684,110 @@ Generated on: ${new Date().toLocaleString()}
     }
   }
 
+  const exportToCSV = () => {
+    if (!hasGeneratedCodes) return
+
+    // Prepare data rows
+    const rows: Array<{ [key: string]: string | number }> = []
+
+    if (generationMode === "connected" && primaryQR) {
+      // For connected mode: one row with quantity
+      const quantity = primaryQR.metadata?.connectedQuantity ?? sanitizeCount(connectedQuantity)
+      rows.push({
+        "QR URL": primaryQR.qrUrl,
+        "Quantity": quantity,
+        "Color": exportColor,
+        "Size": exportSize,
+        "Type": formData.type
+      })
+    } else {
+      // For unique mode: one row per QR code
+      generatedQRCodes.forEach(qr => {
+        rows.push({
+          "QR URL": qr.qrUrl,
+          "Quantity": 1,
+          "Color": exportColor,
+          "Size": exportSize,
+          "Type": formData.type
+        })
+      })
+    }
+
+    // Convert to CSV
+    const headers = ["QR URL", "Quantity", "Color", "Size", "Type"]
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => 
+        headers.map(header => {
+          const value = row[header] ?? ""
+          // Escape commas and quotes in CSV
+          if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
+            return `"${value.replace(/"/g, '""')}"`
+          }
+          return value
+        }).join(",")
+      )
+    ].join("\n")
+
+    // Download CSV
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `qr-codes-${generationMode}-${formData.type}-${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const exportToXLSX = () => {
+    if (!hasGeneratedCodes) return
+
+    // Prepare data rows
+    const rows: Array<{ [key: string]: string | number }> = []
+
+    if (generationMode === "connected" && primaryQR) {
+      // For connected mode: one row with quantity
+      const quantity = primaryQR.metadata?.connectedQuantity ?? sanitizeCount(connectedQuantity)
+      rows.push({
+        "QR URL": primaryQR.qrUrl,
+        "Quantity": quantity,
+        "Color": exportColor,
+        "Size": exportSize,
+        "Type": formData.type
+      })
+    } else {
+      // For unique mode: one row per QR code
+      generatedQRCodes.forEach(qr => {
+        rows.push({
+          "QR URL": qr.qrUrl,
+          "Quantity": 1,
+          "Color": exportColor,
+          "Size": exportSize,
+          "Type": formData.type
+        })
+      })
+    }
+
+    // Create workbook and worksheet
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, "QR Codes")
+
+    // Set column widths
+    worksheet['!cols'] = [
+      { wch: 50 }, // QR URL
+      { wch: 10 }, // Quantity
+      { wch: 15 }, // Color
+      { wch: 15 }, // Size
+      { wch: 15 }  // Type
+    ]
+
+    // Download XLSX
+    XLSX.writeFile(workbook, `qr-codes-${generationMode}-${formData.type}-${new Date().toISOString().split('T')[0]}.xlsx`)
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -908,7 +1015,72 @@ Generated on: ${new Date().toLocaleString()}
                   Users will scan this QR code and fill in all their {formData.type} details and contact information.
                 </p>
                 <p className="text-sm text-green-600">
-                  <strong>Export Options:</strong> Choose from PNG, SVG, PDF, or TXT formats below.
+                  <strong>Export Options:</strong> Choose from PNG, SVG, PDF, TXT, CSV, or XLSX formats below.
+                </p>
+              </div>
+
+              {/* CSV and XLSX Export Controls */}
+              <div className="border-t pt-4 space-y-3">
+                <Label className="text-sm font-semibold block">Export to Spreadsheet</Label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-gray-600">Sticker Color</Label>
+                    <Select
+                      value={exportColor}
+                      onValueChange={(value: "silver" | "black" | "golden" | "white") => setExportColor(value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select color" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="silver">Silver</SelectItem>
+                        <SelectItem value="black">Black</SelectItem>
+                        <SelectItem value="golden">Golden</SelectItem>
+                        <SelectItem value="white">White</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs text-gray-600">Sticker Size</Label>
+                    <Select
+                      value={exportSize}
+                      onValueChange={(value: "2x20mm" | "2x25mm" | "2x30mm") => setExportSize(value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select size" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2x20mm">2x20mm</SelectItem>
+                        <SelectItem value="2x25mm">2x25mm</SelectItem>
+                        <SelectItem value="2x30mm">2x30mm</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button 
+                    onClick={exportToCSV} 
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Export CSV
+                  </Button>
+                  <Button 
+                    onClick={exportToXLSX} 
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Export XLSX
+                  </Button>
+                </div>
+
+                <p className="text-xs text-gray-500 mt-1">
+                  Exports QR URL, Quantity, Color, Size and Type columns using your selections above.
                 </p>
               </div>
 
