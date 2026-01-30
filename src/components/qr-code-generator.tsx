@@ -74,8 +74,6 @@ export function QRCodeGenerator() {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [exportFormat, setExportFormat] = useState<"png" | "svg" | "pdf" | "txt">("png")
-  const [exportColor, setExportColor] = useState<"silver" | "black" | "golden" | "white">("silver")
-  const [exportSize, setExportSize] = useState<"2x20mm" | "2x25mm" | "2x30mm">("2x20mm")
   const [copiesCount, setCopiesCount] = useState(1)
   const [uniqueCount, setUniqueCount] = useState(1)
   const [connectedQuantity, setConnectedQuantity] = useState(1)
@@ -684,57 +682,45 @@ Generated on: ${new Date().toLocaleString()}
     }
   }
 
-  const exportToCSV = () => {
-    if (!hasGeneratedCodes) return
-
-    // Prepare data rows
-    const rows: Array<{ [key: string]: string | number }> = []
-
+  // Build flat list of QR URLs for export (6 per row: No1..No6)
+  const getExportUrls = (): string[] => {
+    if (!hasGeneratedCodes) return []
     if (generationMode === "connected" && primaryQR) {
-      // For connected mode: one row with quantity
       const quantity = primaryQR.metadata?.connectedQuantity ?? sanitizeCount(connectedQuantity)
-      rows.push({
-        "QR URL": primaryQR.qrUrl,
-        "Quantity": quantity,
-        "Color": exportColor,
-        "Size": exportSize,
-        "Type": formData.type
-      })
-    } else {
-      // For unique mode: one row per QR code
-      generatedQRCodes.forEach(qr => {
-        rows.push({
-          "QR URL": qr.qrUrl,
-          "Quantity": 1,
-          "Color": exportColor,
-          "Size": exportSize,
-          "Type": formData.type
-        })
-      })
+      return Array(quantity).fill(primaryQR.qrUrl)
+    }
+    return generatedQRCodes.map(qr => qr.qrUrl)
+  }
+
+  const exportToCSV = () => {
+    const urls = getExportUrls()
+    if (urls.length === 0) return
+
+    const headers = ["No1", "No2", "No3", "No4", "No5", "No6"]
+    const rows: string[][] = []
+
+    for (let i = 0; i < urls.length; i += 6) {
+      const row = headers.map((_, j) => urls[i + j] ?? "")
+      rows.push(row)
     }
 
-    // Convert to CSV
-    const headers = ["QR URL", "Quantity", "Color", "Size", "Type"]
+    const escapeCsv = (value: string) => {
+      if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+        return `"${value.replace(/"/g, '""')}"`
+      }
+      return value
+    }
+
     const csvContent = [
       headers.join(","),
-      ...rows.map(row => 
-        headers.map(header => {
-          const value = row[header] ?? ""
-          // Escape commas and quotes in CSV
-          if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
-            return `"${value.replace(/"/g, '""')}"`
-          }
-          return value
-        }).join(",")
-      )
+      ...rows.map(row => row.map(escapeCsv).join(","))
     ].join("\n")
 
-    // Download CSV
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
+    const link = document.createElement("a")
     link.href = url
-    link.download = `qr-codes-${generationMode}-${formData.type}-${new Date().toISOString().split('T')[0]}.csv`
+    link.download = `qr-urls-${new Date().toISOString().split("T")[0]}.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -742,50 +728,28 @@ Generated on: ${new Date().toLocaleString()}
   }
 
   const exportToXLSX = () => {
-    if (!hasGeneratedCodes) return
+    const urls = getExportUrls()
+    if (urls.length === 0) return
 
-    // Prepare data rows
-    const rows: Array<{ [key: string]: string | number }> = []
+    const headers = ["No1", "No2", "No3", "No4", "No5", "No6"]
+    const rows: Array<{ No1: string; No2: string; No3: string; No4: string; No5: string; No6: string }> = []
 
-    if (generationMode === "connected" && primaryQR) {
-      // For connected mode: one row with quantity
-      const quantity = primaryQR.metadata?.connectedQuantity ?? sanitizeCount(connectedQuantity)
+    for (let i = 0; i < urls.length; i += 6) {
       rows.push({
-        "QR URL": primaryQR.qrUrl,
-        "Quantity": quantity,
-        "Color": exportColor,
-        "Size": exportSize,
-        "Type": formData.type
-      })
-    } else {
-      // For unique mode: one row per QR code
-      generatedQRCodes.forEach(qr => {
-        rows.push({
-          "QR URL": qr.qrUrl,
-          "Quantity": 1,
-          "Color": exportColor,
-          "Size": exportSize,
-          "Type": formData.type
-        })
+        No1: urls[i] ?? "",
+        No2: urls[i + 1] ?? "",
+        No3: urls[i + 2] ?? "",
+        No4: urls[i + 3] ?? "",
+        No5: urls[i + 4] ?? "",
+        No6: urls[i + 5] ?? ""
       })
     }
 
-    // Create workbook and worksheet
     const worksheet = XLSX.utils.json_to_sheet(rows)
     const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, "QR Codes")
-
-    // Set column widths
-    worksheet['!cols'] = [
-      { wch: 50 }, // QR URL
-      { wch: 10 }, // Quantity
-      { wch: 15 }, // Color
-      { wch: 15 }, // Size
-      { wch: 15 }  // Type
-    ]
-
-    // Download XLSX
-    XLSX.writeFile(workbook, `qr-codes-${generationMode}-${formData.type}-${new Date().toISOString().split('T')[0]}.xlsx`)
+    XLSX.utils.book_append_sheet(workbook, worksheet, "QR URLs")
+    worksheet["!cols"] = [{ wch: 50 }, { wch: 50 }, { wch: 50 }, { wch: 50 }, { wch: 50 }, { wch: 50 }]
+    XLSX.writeFile(workbook, `qr-urls-${new Date().toISOString().split("T")[0]}.xlsx`)
   }
 
   return (
@@ -1019,69 +983,22 @@ Generated on: ${new Date().toLocaleString()}
                 </p>
               </div>
 
-              {/* CSV and XLSX Export Controls */}
-              <div className="border-t pt-4 space-y-3">
-                <Label className="text-sm font-semibold block">Export to Spreadsheet</Label>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-600">Sticker Color</Label>
-                    <Select
-                      value={exportColor}
-                      onValueChange={(value: "silver" | "black" | "golden" | "white") => setExportColor(value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select color" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="silver">Silver</SelectItem>
-                        <SelectItem value="black">Black</SelectItem>
-                        <SelectItem value="golden">Golden</SelectItem>
-                        <SelectItem value="white">White</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-600">Sticker Size</Label>
-                    <Select
-                      value={exportSize}
-                      onValueChange={(value: "2x20mm" | "2x25mm" | "2x30mm") => setExportSize(value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select size" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="2x20mm">2x20mm</SelectItem>
-                        <SelectItem value="2x25mm">2x25mm</SelectItem>
-                        <SelectItem value="2x30mm">2x30mm</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
+              {/* CSV and XLSX Export - URLs only, 6 per row (No1..No6) */}
+              <div className="border-t pt-4">
+                <Label className="text-sm font-semibold block">Export URLs</Label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Download CSV or XLSX with columns No1–No6; each row contains up to 6 scan URLs.
+                </p>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button 
-                    onClick={exportToCSV} 
-                    variant="outline"
-                    className="w-full"
-                  >
+                  <Button onClick={exportToCSV} variant="outline" className="w-full">
                     <FileText className="h-4 w-4 mr-2" />
                     Export CSV
                   </Button>
-                  <Button 
-                    onClick={exportToXLSX} 
-                    variant="outline"
-                    className="w-full"
-                  >
+                  <Button onClick={exportToXLSX} variant="outline" className="w-full">
                     <FileText className="h-4 w-4 mr-2" />
                     Export XLSX
                   </Button>
                 </div>
-
-                <p className="text-xs text-gray-500 mt-1">
-                  Exports QR URL, Quantity, Color, Size and Type columns using your selections above.
-                </p>
               </div>
 
               {generationMode === "unique" && (
