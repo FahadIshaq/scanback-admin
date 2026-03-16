@@ -403,7 +403,7 @@ export function QRCodeGenerator() {
           // Style and add the QR code image
           const canvas = await stylizeQRImage(code.qrImageUrl, {
             lineColor,
-            transparentBackground
+            transparentBackground: false
           })
           const dataUrl = canvas.toDataURL("image/png")
           
@@ -458,7 +458,7 @@ export function QRCodeGenerator() {
       if (generationMode === "connected" && primaryQR) {
         const canvas = await stylizeQRImage(primaryQR.qrImageUrl, {
           lineColor,
-          transparentBackground
+          transparentBackground: false
         })
         const dataUrl = canvas.toDataURL("image/png")
         qrImages = Array.from({ length: desiredCopies }, () => dataUrl)
@@ -467,7 +467,7 @@ export function QRCodeGenerator() {
           generatedQRCodes.map(code =>
             stylizeQRImage(code.qrImageUrl, {
               lineColor,
-              transparentBackground
+              transparentBackground: false
             })
           )
         )
@@ -557,78 +557,83 @@ export function QRCodeGenerator() {
     URL.revokeObjectURL(url)
   }
 
-  const downloadAsPDF = () => {
-    if (!primaryQR) return
+  const downloadAsPDF = async () => {
+    // Export only the QR images that are currently present,
+    // no extra text or duplicated copies.
+    if (!hasGeneratedCodes) return
 
-    const pdfContent = `
-      %PDF-1.4
-      1 0 obj
-      <<
-        /Type /Catalog
-        /Pages 2 0 R
-      >>
-      endobj
-      
-      2 0 obj
-      <<
-        /Type /Pages
-        /Kids [3 0 R]
-        /Count 1
-      >>
-      endobj
-      
-      3 0 obj
-      <<
-        /Type /Page
-        /Parent 2 0 R
-        /MediaBox [0 0 612 792]
-        /Contents 4 0 R
-      >>
-      endobj
-      
-      4 0 obj
-      <<
-        /Length 200
-      >>
-      stream
-      BT
-      /F1 12 Tf
-      100 700 Td
-      (QR Code: ${primaryQR.code}) Tj
-      0 -20 Td
-      (Type: ${formData.type.toUpperCase()}) Tj
-      0 -20 Td
-      (Scan to activate) Tj
-      ET
-      endstream
-      endobj
-      
-      xref
-      0 5
-      0000000000 65535 f 
-      0000000009 00000 n 
-      0000000058 00000 n 
-      0000000115 00000 n 
-      0000000204 00000 n 
-      trailer
-      <<
-        /Size 5
-        /Root 1 0 R
-      >>
-      startxref
-      404
-      %%EOF
-    `
+    try {
+      const sourceCodes =
+        generationMode === "connected" && primaryQR ? [primaryQR] : generatedQRCodes
 
-    const blob = new Blob([pdfContent], { type: 'application/pdf' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `qr-code-${primaryQR.code}.pdf`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+      // Apply selected line color with solid background for each QR
+      const canvases = await Promise.all(
+        sourceCodes.map(code =>
+          stylizeQRImage(code.qrImageUrl, {
+            lineColor,
+            transparentBackground: false,
+          }),
+        ),
+      )
+      const images = canvases.map(canvas => canvas.toDataURL("image/png"))
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      })
+
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+
+      const margin = 5
+      const codeSizeMm = 20
+      const gapMm = 2
+
+      const usableWidth = pageWidth - margin * 2
+      const usableHeight = pageHeight - margin * 2
+
+      const maxColumns = 10
+      const columns = Math.min(
+        maxColumns,
+        Math.max(1, Math.floor((usableWidth + gapMm) / (codeSizeMm + gapMm))),
+      )
+      const rowsPerPage = Math.max(
+        1,
+        Math.floor((usableHeight + gapMm) / (codeSizeMm + gapMm)),
+      )
+      const codesPerPage = columns * rowsPerPage
+
+      let placed = 0
+      let pageIndex = 0
+
+      while (placed < images.length) {
+        if (pageIndex > 0) {
+          pdf.addPage()
+        }
+
+        for (let row = 0; row < rowsPerPage && placed < images.length; row++) {
+          for (let col = 0; col < columns && placed < images.length; col++) {
+            const x = margin + col * (codeSizeMm + gapMm)
+            const y = margin + row * (codeSizeMm + gapMm)
+            pdf.addImage(images[placed], "PNG", x, y, codeSizeMm, codeSizeMm, undefined, "FAST")
+            placed += 1
+          }
+        }
+
+        pageIndex += 1
+      }
+
+      const filename =
+        sourceCodes.length === 1
+          ? `qr-code-${sourceCodes[0].code}`
+          : `qr-codes-${sourceCodes.length}-batch`
+
+      pdf.save(`${filename}.pdf`)
+    } catch (error) {
+      console.error("Failed to export PDF", error)
+      alert("Unable to export PDF. Please try again.")
+    }
   }
 
   const downloadAsTXT = () => {
