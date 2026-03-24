@@ -528,33 +528,58 @@ export function QRCodeGenerator() {
     }
   }
 
-  const downloadAsSVG = () => {
-    if (!primaryQR) return
+  const downloadAsSVG = async () => {
+    if (!hasGeneratedCodes) return
 
-    const svgContent = `
-      <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-        <rect width="200" height="200" fill="white" stroke="#000" stroke-width="2"/>
-        <text x="100" y="100" text-anchor="middle" font-family="monospace" font-size="12" fill="#000">
-          QR Code: ${primaryQR.code}
-        </text>
-        <text x="100" y="120" text-anchor="middle" font-family="monospace" font-size="10" fill="#666">
-          Type: ${formData.type.toUpperCase()}
-        </text>
-        <text x="100" y="140" text-anchor="middle" font-family="monospace" font-size="8" fill="#999">
-          Scan to activate
-        </text>
-      </svg>
-    `
+    const sourceCodes =
+      generationMode === "connected" && primaryQR ? [primaryQR] : generatedQRCodes
 
-    const blob = new Blob([svgContent], { type: 'image/svg+xml' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `qr-code-${primaryQR.code}.svg`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    try {
+      const zip = new JSZip()
+
+      for (const code of sourceCodes) {
+        const canvas = await stylizeQRImage(code.qrImageUrl, {
+          lineColor,
+          transparentBackground: false,
+        })
+
+        const pngDataUrl = canvas.toDataURL("image/png")
+        const svgContent = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="0 0 ${canvas.width} ${canvas.height}">
+  <image href="${pngDataUrl}" x="0" y="0" width="${canvas.width}" height="${canvas.height}" />
+</svg>`.trim()
+
+        zip.file(`qr-code-${code.code}.svg`, svgContent)
+      }
+
+      if (sourceCodes.length === 1) {
+        const singleFile = zip.file(`qr-code-${sourceCodes[0].code}.svg`)
+        if (!singleFile) return
+        const svgBlob = await singleFile.async("blob")
+        const url = URL.createObjectURL(svgBlob)
+        const link = document.createElement("a")
+        link.href = url
+        link.download = `qr-code-${sourceCodes[0].code}.svg`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        return
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" })
+      const url = URL.createObjectURL(zipBlob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `qr-codes-${sourceCodes.length}-svg.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error("Failed to export SVG", error)
+      alert("Unable to export SVG. Please try again.")
+    }
   }
 
   const downloadAsPDF = async () => {
