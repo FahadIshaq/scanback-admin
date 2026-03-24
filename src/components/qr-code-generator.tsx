@@ -535,43 +535,50 @@ export function QRCodeGenerator() {
       generationMode === "connected" && primaryQR ? [primaryQR] : generatedQRCodes
 
     try {
-      const zip = new JSZip()
+      const canvases = await Promise.all(
+        sourceCodes.map(code =>
+          stylizeQRImage(code.qrImageUrl, {
+            lineColor,
+            transparentBackground: false,
+          }),
+        ),
+      )
 
-      for (const code of sourceCodes) {
-        const canvas = await stylizeQRImage(code.qrImageUrl, {
-          lineColor,
-          transparentBackground: false,
+      if (canvases.length === 0) return
+
+      const codeWidth = canvases[0].width
+      const codeHeight = canvases[0].height
+      const gap = 20
+      const padding = 20
+      const columns = Math.min(10, Math.max(1, sourceCodes.length))
+      const rows = Math.ceil(sourceCodes.length / columns)
+      const sheetWidth = padding * 2 + columns * codeWidth + (columns - 1) * gap
+      const sheetHeight = padding * 2 + rows * codeHeight + (rows - 1) * gap
+
+      const imagesMarkup = canvases
+        .map((canvas, index) => {
+          const col = index % columns
+          const row = Math.floor(index / columns)
+          const x = padding + col * (codeWidth + gap)
+          const y = padding + row * (codeHeight + gap)
+          return `<image href="${canvas.toDataURL("image/png")}" x="${x}" y="${y}" width="${codeWidth}" height="${codeHeight}" />`
         })
+        .join("\n  ")
 
-        const pngDataUrl = canvas.toDataURL("image/png")
-        const svgContent = `
-<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="0 0 ${canvas.width} ${canvas.height}">
-  <image href="${pngDataUrl}" x="0" y="0" width="${canvas.width}" height="${canvas.height}" />
+      const svgContent = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${sheetWidth}" height="${sheetHeight}" viewBox="0 0 ${sheetWidth} ${sheetHeight}">
+  <rect x="0" y="0" width="${sheetWidth}" height="${sheetHeight}" fill="white" />
+  ${imagesMarkup}
 </svg>`.trim()
 
-        zip.file(`qr-code-${code.code}.svg`, svgContent)
-      }
-
-      if (sourceCodes.length === 1) {
-        const singleFile = zip.file(`qr-code-${sourceCodes[0].code}.svg`)
-        if (!singleFile) return
-        const svgBlob = await singleFile.async("blob")
-        const url = URL.createObjectURL(svgBlob)
-        const link = document.createElement("a")
-        link.href = url
-        link.download = `qr-code-${sourceCodes[0].code}.svg`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
-        return
-      }
-
-      const zipBlob = await zip.generateAsync({ type: "blob" })
-      const url = URL.createObjectURL(zipBlob)
+      const blob = new Blob([svgContent], { type: "image/svg+xml" })
+      const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `qr-codes-${sourceCodes.length}-svg.zip`
+      link.download =
+        sourceCodes.length === 1
+          ? `qr-code-${sourceCodes[0].code}.svg`
+          : `qr-codes-${sourceCodes.length}-sheet.svg`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
