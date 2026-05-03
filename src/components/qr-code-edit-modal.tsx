@@ -161,6 +161,7 @@ export function QRCodeEditModal({ qrCode: qrCodeProp, open, onOpenChange, onQRCo
       // Emergency fields
       medicalAidProvider: "",
       medicalAidNumber: "",
+      medicalAidPlan: "",
       bloodType: "",
       allergies: "",
       medications: "",
@@ -276,6 +277,7 @@ export function QRCodeEditModal({ qrCode: qrCodeProp, open, onOpenChange, onQRCo
           // Emergency fields
           medicalAidProvider: (qrCodeProp.details as any)?.medicalAidProvider || "",
           medicalAidNumber: (qrCodeProp.details as any)?.medicalAidNumber || "",
+          medicalAidPlan: (qrCodeProp.details as any)?.medicalAidPlan || "",
           bloodType: (qrCodeProp.details as any)?.bloodType || "",
           allergies: (qrCodeProp.details as any)?.allergies || "",
           medications: (qrCodeProp.details as any)?.medications || "",
@@ -315,6 +317,7 @@ export function QRCodeEditModal({ qrCode: qrCodeProp, open, onOpenChange, onQRCo
       setShowEmergencyMedicalDetails(!!(
         (qrCodeProp.details as any)?.medicalAidProvider ||
         (qrCodeProp.details as any)?.medicalAidNumber ||
+        (qrCodeProp.details as any)?.medicalAidPlan ||
         (qrCodeProp.details as any)?.bloodType ||
         (qrCodeProp.details as any)?.allergies ||
         (qrCodeProp.details as any)?.medications ||
@@ -410,6 +413,7 @@ export function QRCodeEditModal({ qrCode: qrCodeProp, open, onOpenChange, onQRCo
           pedigreeInfo: showPedigreeInfo ? editForm.details.pedigreeInfo : "",
           medicalAidProvider: showEmergencyMedicalDetails ? editForm.details.medicalAidProvider : "",
           medicalAidNumber: showEmergencyMedicalDetails ? editForm.details.medicalAidNumber : "",
+          medicalAidPlan: showEmergencyMedicalDetails ? editForm.details.medicalAidPlan : "",
           bloodType: showEmergencyMedicalDetails ? editForm.details.bloodType : "",
           allergies: showEmergencyMedicalDetails ? editForm.details.allergies : "",
           medications: showEmergencyMedicalDetails ? editForm.details.medications : "",
@@ -1134,6 +1138,19 @@ export function QRCodeEditModal({ qrCode: qrCodeProp, open, onOpenChange, onQRCo
                               className="mt-1"
                             />
                           </div>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="editMedicalAidPlan">Medical Aid Plan</Label>
+                          <Input
+                            id="editMedicalAidPlan"
+                            value={editForm.details.medicalAidPlan || ""}
+                            onChange={(e) =>
+                              handleEditInputChange("details.medicalAidPlan", e.target.value)
+                            }
+                            placeholder="e.g., Classic Saver, KeyCare Plus"
+                            className="mt-1"
+                          />
                         </div>
 
                         <div>

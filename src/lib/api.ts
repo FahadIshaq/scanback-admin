@@ -49,6 +49,7 @@ interface QRCode {
     // Emergency Details fields
     medicalAidProvider?: string;
     medicalAidNumber?: string;
+    medicalAidPlan?: string;
     bloodType?: string;
     allergies?: string;
     medications?: string;

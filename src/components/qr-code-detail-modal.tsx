@@ -572,6 +572,10 @@ export function QRCodeDetailModal({ qrCode: qrCodeProp, open, onOpenChange, onQR
                         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Medical Aid Number</label>
                         <p className="text-sm mt-1 font-mono">{qrCode.details?.medicalAidNumber || 'N/A'}</p>
                       </div>
+                      <div className="col-span-2 md:col-span-3">
+                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Medical Aid Plan</label>
+                        <p className="text-sm mt-1">{(qrCode.details as any)?.medicalAidPlan || 'N/A'}</p>
+                      </div>
                       {qrCode.details?.organDonor !== undefined && (
                         <div>
                           <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Organ Donor</label>
