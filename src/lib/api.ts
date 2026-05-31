@@ -526,6 +526,44 @@ class AdminApiClient {
     const query = whiteLabelId ? `?whiteLabelId=${whiteLabelId}` : '';
     return this.request<ApiResponse<{ admins: any[] }>>(`/api/admin/white-label-admins${query}`);
   }
+
+  async getAllWhiteLabelSummaries(): Promise<ApiResponse<{ summaries: any[] }>> {
+    return this.request('/api/admin/white-labels/summary');
+  }
+
+  async getWhiteLabelStats(id: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/admin/white-label/${id}/stats`);
+  }
+
+  async getWhiteLabelAnalytics(id: string, period = '30d'): Promise<ApiResponse<any>> {
+    return this.request(`/api/admin/white-label/${id}/analytics?period=${period}`);
+  }
+
+  async getWhiteLabelQRCodes(
+    id: string,
+    params?: { page?: number; limit?: number; type?: string; status?: string; search?: string },
+  ): Promise<ApiResponse<any>> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.type) queryParams.append('type', params.type);
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.search) queryParams.append('search', params.search);
+    const query = queryParams.toString();
+    return this.request(`/api/admin/white-label/${id}/qr-codes${query ? `?${query}` : ''}`);
+  }
+
+  async getWhiteLabelUsers(
+    id: string,
+    params?: { page?: number; limit?: number; search?: string },
+  ): Promise<ApiResponse<any>> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.search) queryParams.append('search', params.search);
+    const query = queryParams.toString();
+    return this.request(`/api/admin/white-label/${id}/users${query ? `?${query}` : ''}`);
+  }
 }
 
 export const adminApiClient = new AdminApiClient(API_BASE_URL);

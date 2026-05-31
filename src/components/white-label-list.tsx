@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Search, Edit, Trash2, Palette, Power, PowerOff } from "lucide-react"
+import { Plus, Search, Edit, Trash2, Palette, Power, PowerOff, BarChart3, QrCode, Users, Eye } from "lucide-react"
 import adminApiClient from "@/lib/api"
 import { WhiteLabelModal } from "@/components/white-label-modal"
+import { WhiteLabelStatsModal } from "@/components/white-label-stats-modal"
 
 interface WhiteLabel {
   _id: string
@@ -17,20 +18,46 @@ interface WhiteLabel {
   createdAt: string
 }
 
+interface WhiteLabelSummary {
+  whiteLabelId: string
+  totalQRCodes: number
+  activatedQRCodes: number
+  totalUsers: number
+  totalScans: number
+}
+
 export function WhiteLabelList() {
   const [whiteLabels, setWhiteLabels] = useState<WhiteLabel[]>([])
+  const [summaries, setSummaries] = useState<Record<string, WhiteLabelSummary>>({})
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedWhiteLabel, setSelectedWhiteLabel] = useState<WhiteLabel | null>(null)
+  const [statsWhiteLabel, setStatsWhiteLabel] = useState<WhiteLabel | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [statsModalOpen, setStatsModalOpen] = useState(false)
+
+  const loadSummaries = useCallback(async () => {
+    try {
+      const response = await adminApiClient.getAllWhiteLabelSummaries()
+      if (response.success && response.data?.summaries) {
+        const map: Record<string, WhiteLabelSummary> = {}
+        for (const s of response.data.summaries) {
+          map[s.whiteLabelId] = s
+        }
+        setSummaries(map)
+      }
+    } catch (error) {
+      console.error("Failed to load white label summaries:", error)
+    }
+  }, [])
 
   const loadWhiteLabels = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await adminApiClient.getAllWhiteLabels({ 
+      const response = await adminApiClient.getAllWhiteLabels({
         page: 1,
         limit: 100,
-        search: searchTerm || undefined
+        search: searchTerm || undefined,
       })
       if (response.success) {
         setWhiteLabels(response.data.whiteLabels || [])
@@ -44,7 +71,8 @@ export function WhiteLabelList() {
 
   useEffect(() => {
     loadWhiteLabels()
-  }, [loadWhiteLabels])
+    loadSummaries()
+  }, [loadWhiteLabels, loadSummaries])
 
   const handleCreateNew = () => {
     setSelectedWhiteLabel(null)
@@ -56,15 +84,21 @@ export function WhiteLabelList() {
     setModalOpen(true)
   }
 
+  const handleViewStats = (whiteLabel: WhiteLabel) => {
+    setStatsWhiteLabel(whiteLabel)
+    setStatsModalOpen(true)
+  }
+
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this white label? This action cannot be undone.")) {
       return
     }
-    
+
     try {
       const response = await adminApiClient.deleteWhiteLabel(id)
       if (response.success) {
         loadWhiteLabels()
+        loadSummaries()
       } else {
         alert(response.message || "Failed to delete white label")
       }
@@ -78,6 +112,7 @@ export function WhiteLabelList() {
       const response = await adminApiClient.toggleWhiteLabelStatus(id)
       if (response.success) {
         loadWhiteLabels()
+        loadSummaries()
       } else {
         alert(response.message || "Failed to toggle white label status")
       }
@@ -86,17 +121,20 @@ export function WhiteLabelList() {
     }
   }
 
-  const filteredWhiteLabels = whiteLabels.filter(wl =>
-    wl.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    wl.brandName.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredWhiteLabels = whiteLabels.filter(
+    (wl) =>
+      wl.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      wl.brandName.toLowerCase().includes(searchTerm.toLowerCase()),
   )
+
+  const getSummary = (id: string) => summaries[id]
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">White Label Management</h2>
-          <p className="text-gray-600 mt-1">Manage white label company configurations</p>
+          <p className="text-gray-600 mt-1">Manage white label companies and view their stats</p>
         </div>
         <Button onClick={handleCreateNew}>
           <Plus className="h-4 w-4 mr-2" />
@@ -104,7 +142,6 @@ export function WhiteLabelList() {
         </Button>
       </div>
 
-      {/* Search */}
       <Card>
         <CardContent className="p-6">
           <div className="relative">
@@ -119,7 +156,6 @@ export function WhiteLabelList() {
         </CardContent>
       </Card>
 
-      {/* White Labels List */}
       <Card>
         <CardHeader>
           <CardTitle>White Labels</CardTitle>
@@ -140,73 +176,97 @@ export function WhiteLabelList() {
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredWhiteLabels.map((whiteLabel) => (
-                <div
-                  key={whiteLabel._id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center space-x-4 flex-1 min-w-0">
-                    {whiteLabel.logo && (
-                      <div className="flex-shrink-0">
-                        <img
-                          src={whiteLabel.logo}
-                          alt={whiteLabel.brandName}
-                          className="h-12 w-12 object-contain rounded border bg-white p-1"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none'
-                          }}
-                        />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900 truncate">
-                          {whiteLabel.brandName}
-                        </h3>
-                        {whiteLabel.isActive ? (
-                          <span className="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-800 rounded-full">
-                            Inactive
-                          </span>
+              {filteredWhiteLabels.map((whiteLabel) => {
+                const summary = getSummary(whiteLabel._id)
+                return (
+                  <div
+                    key={whiteLabel._id}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center space-x-4 flex-1 min-w-0">
+                      {whiteLabel.logo && (
+                        <div className="flex-shrink-0">
+                          <img
+                            src={whiteLabel.logo}
+                            alt={whiteLabel.brandName}
+                            className="h-12 w-12 object-contain rounded border bg-white p-1"
+                            onError={(e) => {
+                              ;(e.target as HTMLImageElement).style.display = "none"
+                            }}
+                          />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-semibold text-gray-900 truncate">
+                            {whiteLabel.brandName}
+                          </h3>
+                          {whiteLabel.isActive ? (
+                            <span className="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-800 rounded-full">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600 truncate">{whiteLabel.email}</p>
+                        {summary && (
+                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                            <span className="flex items-center gap-1">
+                              <QrCode className="h-3.5 w-3.5" />
+                              {summary.totalQRCodes} tags
+                            </span>
+                            <span className="flex items-center gap-1 text-green-600">
+                              <Eye className="h-3.5 w-3.5" />
+                              {summary.activatedQRCodes} activated
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Users className="h-3.5 w-3.5" />
+                              {summary.totalUsers} users
+                            </span>
+                            <span>{summary.totalScans.toLocaleString()} scans</span>
+                          </div>
                         )}
                       </div>
-                      <p className="text-sm text-gray-600 truncate">{whiteLabel.email}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewStats(whiteLabel)}
+                        title="View stats & analytics"
+                      >
+                        <BarChart3 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleToggleStatus(whiteLabel._id)}
+                        title={whiteLabel.isActive ? "Deactivate" : "Activate"}
+                      >
+                        {whiteLabel.isActive ? (
+                          <PowerOff className="h-4 w-4" />
+                        ) : (
+                          <Power className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(whiteLabel)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(whiteLabel._id)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleToggleStatus(whiteLabel._id)}
-                      title={whiteLabel.isActive ? "Deactivate" : "Activate"}
-                    >
-                      {whiteLabel.isActive ? (
-                        <PowerOff className="h-4 w-4" />
-                      ) : (
-                        <Power className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEdit(whiteLabel)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDelete(whiteLabel._id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
@@ -224,9 +284,20 @@ export function WhiteLabelList() {
         onWhiteLabelUpdated={() => {
           setSelectedWhiteLabel(null)
           loadWhiteLabels()
+          loadSummaries()
+        }}
+      />
+
+      <WhiteLabelStatsModal
+        whiteLabel={statsWhiteLabel}
+        open={statsModalOpen}
+        onOpenChange={(open) => {
+          setStatsModalOpen(open)
+          if (!open) {
+            setStatsWhiteLabel(null)
+          }
         }}
       />
     </div>
   )
 }
-
